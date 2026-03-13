@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // This rule allows anyone with your Firestore database reference to view, edit,
+    // and delete all data in your Firestore database. It is useful for getting
+    // started, but it is configured to expire after 30 days because it
+    // leaves your app open to attackers. At that time, all client
+    // requests to your Firestore database will be denied.
+    //
+    // Make sure to write security rules for your app before that time, or else
+    // all client requests to your Firestore database will be denied until you Update
+    // your rules
+    // Helper para verificar rol del usuario
+    function isAdmin() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isAsistente() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'asistente';
+    }
+
+    // **************** PRODUCTOS ****************
+    match /productos/{productoId} {
+      allow read: if isAdmin() || isAsistente();   // admin y asistente pueden leer
+      allow write: if isAdmin();                   // solo admin puede crear/editar/eliminar
+    }
+
+    // **************** CLIENTES ****************
+    match /clientes/{clienteId} {
+      allow read: if isAdmin() || isAsistente();   // admin y asistente pueden leer
+      allow write: if isAdmin();                   // solo admin puede crear/editar/eliminar
+    }
+
+    // **************** PEDIDOS ****************
+    match /pedidos/{pedidoId} {
+      allow read: if isAdmin() || isAsistente();   // ambos pueden leer
+      allow write: if isAdmin() || isAsistente();  // ambos pueden crear/editar/eliminar pedidos
+    }
+
+    // **************** USUARIOS ****************
+    match /usuarios/{usuarioId} {
+      allow read: if isAdmin() || (isAsistente() && request.auth.uid == usuarioId); // admin puede leer todos, asistente sólo su info
+      allow create: if isAdmin();  // solo admin puede crear usuarios (admin y asistente)
+      allow update: if isAdmin() || (isAsistente() && request.auth.uid == usuarioId);  // admin puede editar cualquiera, asistente solo su perfil
+      allow delete: if isAdmin();  // solo admin puede eliminar usuarios
+    }
+
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2026, 8, 22);
+    }
+  }
+}
