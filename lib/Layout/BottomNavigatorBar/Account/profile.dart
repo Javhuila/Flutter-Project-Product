@@ -68,7 +68,9 @@ class _ProfileState extends State<Profile> {
   }
 
   Future<void> _loadProfileData() async {
-    final messenger = ScaffoldMessenger.of(context);
+    // Se elimino, debido a que no se puede usar context
+    // cuando la funcion es llamada en initState
+    // final messenger = ScaffoldMessenger.of(context);
     try {
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -110,11 +112,14 @@ class _ProfileState extends State<Profile> {
         }
       }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Error cargando perfil: $e')),
-      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error cargando perfil: $e')));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
