@@ -3,6 +3,7 @@ import 'package:convex_bottom_bar/convex_bottom_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Clientes/clientes.dart';
+import 'package:flutter_project_product/Compras/compra_venta.dart';
 import 'package:flutter_project_product/Inventario/inventario.dart';
 import 'package:flutter_project_product/Layout/BottomNavigatorBar/settings_account.dart';
 import 'package:flutter_project_product/Layout/BottomNavigatorBar/dashboard.dart';
@@ -152,6 +153,17 @@ class _IniLayoutState extends State<IniLayout> {
                     navigator.push(
                       MaterialPageRoute(
                         builder: (context) => const Inventario(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 50),
+                ActionButtonWidget(
+                  nameButton: "Compra",
+                  actionButton: () {
+                    navigator.push(
+                      MaterialPageRoute(
+                        builder: (context) => const CompraVenta(),
                       ),
                     );
                   },
