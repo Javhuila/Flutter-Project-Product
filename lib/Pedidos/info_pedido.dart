@@ -35,6 +35,9 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
 
   bool _cargandoDeuda = true;
 
+  Map<String, dynamic>? _adminCache;
+  String? _clienteTelefonoCache;
+
   @override
   void initState() {
     super.initState();
@@ -153,6 +156,24 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
         } catch (_) {}
       }
 
+      String? adminNombre;
+      String? adminTelefono;
+
+      if (userId != null) {
+        final adminData = await _obtenerAdminData(userId);
+
+        if (adminData != null) {
+          adminNombre = adminData['name'];
+          adminTelefono = adminData['telefono'];
+        }
+      }
+
+      String? clienteTelefono;
+
+      if (cliente.isNotEmpty) {
+        clienteTelefono = await _obtenerClienteData(cliente);
+      }
+
       // Imprimir deuda
       final pago = data['pago'] as Map<String, dynamic>?;
 
@@ -225,30 +246,73 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: pw.EdgeInsets.all(32),
+          footer: (context) {
+            return pw.Column(
+              children: [
+                pw.Divider(),
+                pw.SizedBox(height: 5),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      "Realizado por: ${adminNombre ?? 'Administrador'}",
+                      style: pw.TextStyle(fontSize: 20),
+                    ),
+                    pw.Text(
+                      adminTelefono ?? '',
+                      style: pw.TextStyle(fontSize: 20),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
           build: (pw.Context context) {
             final widgets = <pw.Widget>[];
 
             widgets.add(
-              pw.Text(
-                'Recibo de Pedido N° $numPedido',
-                style: pw.TextStyle(
-                  fontSize: 33,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Fecha: $fecha', style: pw.TextStyle(fontSize: 28)),
+                  pw.Text(
+                    'N° $numPedido',
+                    style: pw.TextStyle(
+                      fontSize: 33,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             );
             widgets.add(pw.SizedBox(height: 10));
             widgets.add(
-              pw.Text(
-                'Cliente: $cliente',
-                style: pw.TextStyle(
-                  fontSize: 40,
-                  fontNormal: pw.Font.helvetica(),
-                ),
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    flex: 7, // 🔥 50%
+                    child: pw.Text(
+                      'Cliente: $cliente',
+                      style: pw.TextStyle(
+                        fontSize: 35,
+                        fontNormal: pw.Font.helvetica(),
+                      ),
+                      maxLines: 2,
+                      softWrap: true,
+                      overflow: pw.TextOverflow.clip,
+                    ),
+                  ),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    flex: 3, // 🔥 50%
+                    child: pw.Text(
+                      'Tel: ${clienteTelefono ?? ''}',
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(fontSize: 22),
+                    ),
+                  ),
+                ],
               ),
-            );
-            widgets.add(
-              pw.Text('Fecha: $fecha', style: pw.TextStyle(fontSize: 28)),
             );
             widgets.add(pw.SizedBox(height: 10));
             widgets.add(
@@ -662,6 +726,53 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
     setState(() {
       _cargandoDeuda = false;
     });
+  }
+
+  Future<Map<String, dynamic>?> _obtenerAdminData(String userId) async {
+    if (_adminCache != null) return _adminCache;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
+
+    if (!userDoc.exists) return null;
+
+    final data = userDoc.data()!;
+    final role = data['role'];
+
+    if (role == 'admin') {
+      return data;
+    } else if (role == 'asistente') {
+      final adminId = data['adminId'];
+      if (adminId == null) return null;
+
+      final adminDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(adminId)
+          .get();
+
+      _adminCache = adminDoc.data();
+      return _adminCache;
+    }
+
+    return null;
+  }
+
+  Future<String?> _obtenerClienteData(String nombreCliente) async {
+    if (_clienteTelefonoCache != null) return _clienteTelefonoCache;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('clientes')
+        .where('nombreCompleto', isEqualTo: nombreCliente)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) return null;
+
+    _clienteTelefonoCache = snapshot.docs.first.data()['telefono'];
+
+    return _clienteTelefonoCache;
   }
 
   @override
