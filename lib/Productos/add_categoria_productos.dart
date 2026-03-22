@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -57,6 +58,7 @@ class _AddCategoriaProductosState extends State<AddCategoriaProductos> {
     final controller = TextEditingController(text: doc?['nombre']);
     File? selectedImage;
     String? imageUrl = doc?['imagen'];
+    final dpr = MediaQuery.of(context).devicePixelRatio;
     final navigator = Navigator.of(context);
 
     await showDialog(
@@ -80,7 +82,21 @@ class _AddCategoriaProductosState extends State<AddCategoriaProductos> {
                   if (selectedImage != null)
                     Image.file(selectedImage!, height: 100)
                   else if (imageUrl != null && imageUrl.isNotEmpty)
-                    Image.network(imageUrl, height: 100),
+                    CachedNetworkImage(
+                      imageUrl: getOptimizedCloudinaryUrl(imageUrl),
+                      filterQuality: FilterQuality.low,
+                      height: 100,
+                      fit: BoxFit.cover,
+                      fadeInDuration: const Duration(milliseconds: 150),
+                      fadeOutDuration: const Duration(milliseconds: 100),
+                      memCacheHeight: (100 * dpr.toInt()),
+                      memCacheWidth: (100 * dpr.toInt()),
+                      useOldImageOnUrlChange: true,
+                      placeholder: (_, _) =>
+                          const CircularProgressIndicator(strokeWidth: 2),
+                      errorWidget: (context, url, error) =>
+                          const Icon(Icons.broken_image, size: 50),
+                    ),
                   ElevatedButton.icon(
                     onPressed: () async {
                       final source = await showModalBottomSheet<ImageSource>(
@@ -190,6 +206,9 @@ class _AddCategoriaProductosState extends State<AddCategoriaProductos> {
               itemCount: _categorias.length,
               itemBuilder: (_, i) {
                 final cat = _categorias[i];
+                final imageUrl = cat['imagen'];
+                final dpr = MediaQuery.of(context).devicePixelRatio;
+
                 return ListTile(
                   leading:
                       cat['imagen'] != null &&
@@ -197,7 +216,8 @@ class _AddCategoriaProductosState extends State<AddCategoriaProductos> {
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: CachedNetworkImage(
-                            imageUrl: cat['imagen'],
+                            imageUrl: getOptimizedCloudinaryUrl(imageUrl),
+                            filterQuality: FilterQuality.low,
                             placeholder: (_, _) => const SizedBox(
                               width: 45,
                               height: 45,
@@ -206,8 +226,14 @@ class _AddCategoriaProductosState extends State<AddCategoriaProductos> {
                             width: 45,
                             height: 45,
                             fit: BoxFit.cover,
+                            fadeInDuration: const Duration(milliseconds: 150),
+                            fadeOutDuration: const Duration(milliseconds: 100),
+                            memCacheHeight: (45 * dpr.toInt()),
+                            memCacheWidth: (45 * dpr.toInt()),
+                            useOldImageOnUrlChange: true,
                             errorWidget: (context, url, error) =>
                                 const Icon(Icons.broken_image, size: 35),
+                            cacheManager: CustomCacheManager.instance,
                           ),
                         )
                       : const CircleAvatar(
@@ -235,4 +261,18 @@ class _AddCategoriaProductosState extends State<AddCategoriaProductos> {
             ),
     );
   }
+}
+
+class CustomCacheManager {
+  static const key = 'customCacheKey';
+
+  static final CacheManager instance = CacheManager(
+    Config(
+      key,
+      stalePeriod: const Duration(days: 7),
+      maxNrOfCacheObjects: 100,
+      repo: JsonCacheInfoRepository(databaseName: key),
+      fileService: HttpFileService(),
+    ),
+  );
 }

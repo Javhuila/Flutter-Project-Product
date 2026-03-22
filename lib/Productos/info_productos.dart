@@ -107,6 +107,8 @@ class _InfoProductosState extends State<InfoProductos> {
           ).format((fechaActualizacion as Timestamp).toDate())
         : 'Sin fecha';
 
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+
     if (_isLoadingRole) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -147,14 +149,15 @@ class _InfoProductosState extends State<InfoProductos> {
               child: Stack(
                 children: [
                   // Imagen principal del producto
-                  if (imagenUrl.isNotEmpty)
+                  if (imagenUrl != null && imagenUrl.isNotEmpty)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: CachedNetworkImage(
                         fadeInDuration: Duration(milliseconds: 300),
                         fadeOutDuration: Duration(milliseconds: 200),
-                        memCacheHeight: 1000, // opcional para pantallas HD
-                        maxHeightDiskCache: 1000,
+                        memCacheHeight:
+                            (490 * dpr.toInt()), // opcional para pantallas HD
+                        maxHeightDiskCache: (490 * dpr.toInt()),
                         useOldImageOnUrlChange: true,
                         filterQuality: FilterQuality.low,
                         // imageUrl: imagenUrl,
@@ -192,13 +195,21 @@ class _InfoProductosState extends State<InfoProductos> {
                         child: Container(
                           color: Colors.white.withValues(alpha: 0.8),
                           padding: const EdgeInsets.all(4),
-                          child: Image.network(
-                            _categoriaImagen!,
+                          child: CachedNetworkImage(
+                            imageUrl: _categoriaImagen!,
+                            filterQuality: FilterQuality.low,
                             width: 98,
                             height: 98,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.broken_image, size: 32),
+                            fadeInDuration: const Duration(milliseconds: 150),
+                            fadeOutDuration: const Duration(milliseconds: 100),
+                            memCacheHeight: (98 * dpr.toInt()),
+                            memCacheWidth: (98 * dpr.toInt()),
+                            useOldImageOnUrlChange: true,
+                            placeholder: (_, _) =>
+                                const CircularProgressIndicator(strokeWidth: 2),
+                            errorWidget: (context, url, error) =>
+                                const Icon(Icons.broken_image, size: 98),
                           ),
                         ),
                       ),

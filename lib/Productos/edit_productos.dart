@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
@@ -186,6 +187,8 @@ class _EditProductosState extends State<EditProductos> {
 
   @override
   Widget build(BuildContext context) {
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final imageUrl = widget.producto['imagen'];
     return Scaffold(
       appBar: AppBar(title: const Text("Editar productos")),
       body: _tipoCategory.isEmpty || _listClasifica.isEmpty
@@ -309,10 +312,22 @@ class _EditProductosState extends State<EditProductos> {
                                 ? (widget.producto['imagen'] != null
                                       ? ClipOval(
                                           child: CachedNetworkImage(
-                                            imageUrl: widget.producto['imagen'],
+                                            imageUrl: getOptimizedCloudinaryUrl(
+                                              imageUrl,
+                                            ),
+                                            filterQuality: FilterQuality.low,
                                             fit: BoxFit.cover,
                                             width: 100,
                                             height: 100,
+                                            fadeInDuration: const Duration(
+                                              milliseconds: 150,
+                                            ),
+                                            fadeOutDuration: const Duration(
+                                              milliseconds: 100,
+                                            ),
+                                            memCacheHeight: (100 * dpr.toInt()),
+                                            memCacheWidth: (100 * dpr.toInt()),
+                                            useOldImageOnUrlChange: true,
                                             placeholder: (context, url) =>
                                                 const Center(
                                                   child:
@@ -321,6 +336,8 @@ class _EditProductosState extends State<EditProductos> {
                                             errorWidget:
                                                 (context, url, error) =>
                                                     const Icon(Icons.error),
+                                            cacheManager:
+                                                CustomCacheManager.instance,
                                           ),
                                         )
                                       : const Icon(Icons.camera_alt, size: 50))
@@ -365,4 +382,18 @@ class _EditProductosState extends State<EditProductos> {
             ),
     );
   }
+}
+
+class CustomCacheManager {
+  static const key = 'customCacheKey';
+
+  static final CacheManager instance = CacheManager(
+    Config(
+      key,
+      stalePeriod: const Duration(days: 7),
+      maxNrOfCacheObjects: 100,
+      repo: JsonCacheInfoRepository(databaseName: key),
+      fileService: HttpFileService(),
+    ),
+  );
 }
