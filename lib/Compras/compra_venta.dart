@@ -11,18 +11,62 @@ class CompraVenta extends StatefulWidget {
 }
 
 class _CompraVentaState extends State<CompraVenta> {
+  void _confirmarEliminar(BuildContext context, DocumentReference ref) {
+    final messenger = ScaffoldMessenger.of(context);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Eliminar compra"),
+        content: const Text("¿Estás seguro que quieres eliminar esta compra?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("Cancelar"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                await ref.delete();
+
+                if (!mounted) return;
+
+                messenger
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(
+                      content: Text("Compra eliminada"),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+              } catch (e) {
+                if (!mounted) return;
+
+                messenger.showSnackBar(
+                  SnackBar(content: Text("Error al eliminar: $e")),
+                );
+              }
+            },
+            child: const Text("Eliminar"),
+          ),
+        ],
+      ),
+    );
+  }
+
   IconData getIcon(String tipo) {
     switch (tipo) {
       case 'diario':
-        return Icons.today;
+        return Icons.free_cancellation_outlined;
       case 'semanal':
-        return Icons.calendar_view_week;
+        return Icons.today;
       case 'mensual':
         return Icons.calendar_month;
       case 'anual':
         return Icons.event;
       default:
-        return Icons.help;
+        return Icons.perm_contact_calendar_outlined;
     }
   }
 
@@ -77,44 +121,65 @@ class _CompraVentaState extends State<CompraVenta> {
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    child: Icon(getIcon(data['concurrencia'] ?? '')),
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          child: Icon(getIcon(data['concurrencia'] ?? '')),
+                        ),
 
-                  title: Text(
-                    "${data['total_productos']} productos",
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                        title: Text(
+                          "${data['total_productos']} productos",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
 
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Proveedor: ${data['proveedor'] ?? 'N/A'}"),
-                      Text("Destinatario: ${data['destinatario'] ?? 'N/A'}"),
-                    ],
-                  ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Proveedor: ${data['proveedor'] ?? 'N/A'}"),
+                            Text(
+                              "Destinatario: ${data['destinatario'] ?? 'N/A'}",
+                            ),
+                          ],
+                        ),
 
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        "\$${data['total_compra'] ?? 0}",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        // trailing:
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  InfoCompra(compra: compras[index]),
+                            ),
+                          );
+                        },
                       ),
-                      Text(fechaText, style: const TextStyle(fontSize: 12)),
-                    ],
-                  ),
-
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => InfoCompra(compra: compras[index]),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10, top: 3),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            "\$${data['total_compra'] ?? 0}",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(fechaText, style: const TextStyle(fontSize: 12)),
+                          IconButton(
+                            icon: const Icon(Icons.delete_sweep_outlined),
+                            tooltip: "Eliminar compra",
+                            onPressed: () => _confirmarEliminar(
+                              context,
+                              compras[index].reference,
+                            ),
+                          ),
+                        ],
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 ),
               );
             },
