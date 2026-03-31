@@ -141,7 +141,15 @@ class _AddCompraState extends State<AddCompra> {
         return now.weekday - 1;
 
       case "mensual":
-        return ((now.day - 1) / 7).floor();
+        final primerDia = DateTime(now.year, now.month, 1);
+        final offset = primerDia.weekday - 1;
+
+        final indice = ((now.day + offset - 1) / 7).floor();
+
+        final totalCeldas = DateTime(now.year, now.month + 1, 0).day + offset;
+        final totalSemanas = (totalCeldas / 7).ceil();
+
+        return indice.clamp(0, totalSemanas - 1);
 
       case "anual":
         return now.month - 1;
