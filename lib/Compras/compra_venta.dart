@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Compras/add_compra.dart';
 import 'package:flutter_project_product/Compras/info_compra.dart';
@@ -11,6 +12,52 @@ class CompraVenta extends StatefulWidget {
 }
 
 class _CompraVentaState extends State<CompraVenta> {
+  String? _userRole;
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _inicializarCompra();
+  }
+
+  Future<void> _inicializarCompra() async {
+    if (!mounted) return;
+    setState(() => _cargando = true);
+    await _loadUserRole();
+    if (!mounted) return;
+    setState(() => _cargando = false);
+  }
+
+  Future<void> _loadUserRole() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (doc.exists) {
+        setState(() {
+          _userRole = doc['role'];
+          _cargando = false;
+        });
+      } else {
+        setState(() {
+          _userRole = 'asistente'; // fallback
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _userRole = 'asistente'; // fallback en caso de error
+        _cargando = false;
+      });
+    }
+  }
+
   void _confirmarEliminar(BuildContext context, DocumentReference ref) {
     final messenger = ScaffoldMessenger.of(context);
 
@@ -72,6 +119,10 @@ class _CompraVentaState extends State<CompraVenta> {
 
   @override
   Widget build(BuildContext context) {
+    if (_cargando) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final comprasStream = FirebaseFirestore.instance
         .collection('compras')
         .orderBy('fecha', descending: true)
@@ -79,18 +130,22 @@ class _CompraVentaState extends State<CompraVenta> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("Comprar"),
-        actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddCompra()),
-              );
-            },
-            icon: Icon(Icons.add_shopping_cart),
-          ),
-        ],
+        title: Text("Compras"),
+        actions: _userRole == 'admin'
+            ? [
+                IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AddCompra(),
+                      ),
+                    );
+                  },
+                  icon: Icon(Icons.add_shopping_cart),
+                ),
+              ]
+            : [],
       ),
       body: StreamBuilder(
         stream: comprasStream,
@@ -146,13 +201,15 @@ class _CompraVentaState extends State<CompraVenta> {
 
                         // trailing:
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  InfoCompra(compra: compras[index]),
-                            ),
-                          );
+                          if (_userRole == "admin") {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    InfoCompra(compra: compras[index]),
+                              ),
+                            );
+                          }
                         },
                       ),
                     ),
@@ -168,14 +225,16 @@ class _CompraVentaState extends State<CompraVenta> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text(fechaText, style: const TextStyle(fontSize: 12)),
-                          IconButton(
-                            icon: const Icon(Icons.delete_sweep_outlined),
-                            tooltip: "Eliminar compra",
-                            onPressed: () => _confirmarEliminar(
-                              context,
-                              compras[index].reference,
-                            ),
-                          ),
+                          _userRole == "admin"
+                              ? IconButton(
+                                  icon: const Icon(Icons.delete_sweep_outlined),
+                                  tooltip: "Eliminar compra",
+                                  onPressed: () => _confirmarEliminar(
+                                    context,
+                                    compras[index].reference,
+                                  ),
+                                )
+                              : Container(),
                         ],
                       ),
                     ),
