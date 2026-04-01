@@ -323,14 +323,6 @@ class _AddCompraState extends State<AddCompra> {
                     ultimateIcon: Icon(Icons.monetization_on_outlined),
                     storageKey: "historial_precio_base",
                   ),
-                // TextFormField(
-                //   controller: precioDefaultController,
-                //   decoration: const InputDecoration(
-                //     labelText: "Precio base",
-                //     suffixIcon: Icon(Icons.monetization_on_outlined),
-                //   ),
-                //   keyboardType: TextInputType.number,
-                // ),
                 PrecioAutocompleteField(
                   controller: precioController,
                   typeBoard: TextInputType.number,
