@@ -2,11 +2,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PrecioHistorial {
-  static const String keyHistorial = "historial_precios";
-
-  static Future<List<Map<String, dynamic>>> obtenerHistorial() async {
+  static Future<List<Map<String, dynamic>>> obtenerHistorial(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(keyHistorial);
+    final data = prefs.getString(key);
 
     if (data == null) return [];
 
@@ -14,11 +12,11 @@ class PrecioHistorial {
     return decoded.cast<Map<String, dynamic>>();
   }
 
-  static Future<void> guardarPrecio(String valor) async {
+  static Future<void> guardarPrecio(String key, String valor) async {
     if (valor.trim().isEmpty) return;
 
     final prefs = await SharedPreferences.getInstance();
-    List<Map<String, dynamic>> historial = await obtenerHistorial();
+    List<Map<String, dynamic>> historial = await obtenerHistorial(key);
 
     int index = historial.indexWhere((e) => e["valor"] == valor);
 
@@ -30,10 +28,10 @@ class PrecioHistorial {
 
     historial.sort((a, b) => b["count"].compareTo(a["count"]));
 
-    if (historial.length > 15) {
-      historial = historial.sublist(0, 15);
+    if (historial.length > 50) {
+      historial = historial.sublist(0, 50);
     }
 
-    await prefs.setString(keyHistorial, jsonEncode(historial));
+    await prefs.setString(key, jsonEncode(historial));
   }
 }
