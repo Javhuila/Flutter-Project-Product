@@ -26,8 +26,6 @@ class _AddCompraState extends State<AddCompra> {
   StreamSubscription? _productosSub;
   bool _productosCargados = false;
 
-  final TextEditingController productoController = TextEditingController();
-
   List<Map<String, dynamic>> listaProductos = [];
   final FocusNode _productoFocusNode = FocusNode();
   Timer? _debounce;
@@ -42,6 +40,7 @@ class _AddCompraState extends State<AddCompra> {
   String? nombre;
   String? imagen;
 
+  final productoController = TextEditingController();
   final precioController = TextEditingController();
   final precioDefaultController = TextEditingController();
   final cantidadController = TextEditingController();
@@ -316,44 +315,29 @@ class _AddCompraState extends State<AddCompra> {
                 Center(child: Text("Productos y precios")),
                 _buildAutocomplete(),
                 if (tipoCompra == TipoCompra.flete)
-                  TextFormField(
+                  PrecioAutocompleteField(
                     controller: precioDefaultController,
-                    decoration: const InputDecoration(
-                      labelText: "Precio base",
-                      suffixIcon: Icon(Icons.monetization_on_outlined),
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return "Campo obligatorio";
-                      }
-                      if (double.tryParse(value) == null) {
-                        return "Número inválido";
-                      }
-                      return null;
-                    },
+                    typeBoard: TextInputType.number,
+                    onChanged: () {},
+                    labelTextInput: "Precio base",
+                    ultimateIcon: Icon(Icons.monetization_on_outlined),
+                    storageKey: "historial_precio_base",
                   ),
                 // TextFormField(
-                //   controller: precioController,
+                //   controller: precioDefaultController,
                 //   decoration: const InputDecoration(
-                //     labelText: "Precio compra",
-                //     suffixIcon: Icon(Icons.monetization_on_sharp),
+                //     labelText: "Precio base",
+                //     suffixIcon: Icon(Icons.monetization_on_outlined),
                 //   ),
                 //   keyboardType: TextInputType.number,
-                //   onChanged: (_) => _calcularTotal(),
-                //   validator: (value) {
-                //     if (value == null || value.isEmpty) {
-                //       return "Campo obligatorio";
-                //     }
-                //     if (double.tryParse(value) == null) {
-                //       return "Número inválido";
-                //     }
-                //     return null;
-                //   },
                 // ),
                 PrecioAutocompleteField(
                   controller: precioController,
+                  typeBoard: TextInputType.number,
                   onChanged: _calcularTotal,
+                  labelTextInput: "Precio compra",
+                  ultimateIcon: Icon(Icons.monetization_on_sharp),
+                  storageKey: "historial_precio_compra",
                 ),
                 TextFormField(
                   controller: cantidadController,
@@ -395,7 +379,17 @@ class _AddCompraState extends State<AddCompra> {
 
                     if (esFlete && precioDefault <= 0) return;
 
-                    await PrecioHistorial.guardarPrecio(precioController.text);
+                    if (tipoCompra == TipoCompra.flete) {
+                      await PrecioHistorial.guardarPrecio(
+                        "historial_precio_base",
+                        precioDefaultController.text,
+                      );
+                    }
+
+                    await PrecioHistorial.guardarPrecio(
+                      "historial_precio_compra",
+                      precioController.text,
+                    );
                     // print("Guardando precio: ${precioController.text}");
 
                     _agregarProducto(
@@ -610,19 +604,25 @@ class _AddCompraState extends State<AddCompra> {
 class PrecioAutocompleteField extends StatefulWidget {
   final TextEditingController controller;
   final VoidCallback onChanged;
+  final TextInputType typeBoard;
+  final Widget? ultimateIcon;
+  final String labelTextInput;
+  final String storageKey;
 
   const PrecioAutocompleteField({
     super.key,
     required this.controller,
     required this.onChanged,
+    required this.typeBoard,
+    required this.ultimateIcon,
+    required this.labelTextInput,
+    required this.storageKey,
   });
 
   @override
   State<PrecioAutocompleteField> createState() =>
       _PrecioAutocompleteFieldState();
 }
-
-const String keyHistorial = "historial_precios";
 
 class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
   List<Map<String, dynamic>> historial = [];
@@ -640,7 +640,7 @@ class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
   }
 
   Future<void> _cargarHistorial() async {
-    historial = await PrecioHistorial.obtenerHistorial();
+    historial = await PrecioHistorial.obtenerHistorial(widget.storageKey);
     // print("Historial cargado: $historial");
     setState(() {});
   }
@@ -685,10 +685,10 @@ class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
         return TextFormField(
           controller: controller,
           focusNode: focusNode,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: "Precio compra",
-            suffixIcon: Icon(Icons.monetization_on_sharp),
+          keyboardType: widget.typeBoard,
+          decoration: InputDecoration(
+            labelText: widget.labelTextInput,
+            suffixIcon: widget.ultimateIcon,
           ),
           onTap: () async {
             await _cargarHistorial();
@@ -704,7 +704,7 @@ class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
             widget.onChanged();
           },
           onFieldSubmitted: (value) async {
-            await PrecioHistorial.guardarPrecio(value);
+            await PrecioHistorial.guardarPrecio(widget.storageKey, value);
             await _cargarHistorial();
           },
           validator: (value) {
