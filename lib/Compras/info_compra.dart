@@ -630,7 +630,7 @@ class _InfoCompraState extends State<InfoCompra> {
         alignment: Alignment.center,
         padding: const EdgeInsets.all(6),
         transform: resaltado
-            ? (Matrix4.identity()..scaleByDouble(1.15, 0, 0, 0))
+            ? (Matrix4.identity()..scaleByDouble(1.15, 1.15, 1, 1))
             : Matrix4.identity(),
         decoration: esActual
             ? BoxDecoration(
