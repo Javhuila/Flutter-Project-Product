@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Pedidos/Pagos/gestion_cuotas.dart';
 import 'package:flutter_project_product/Pedidos/Pagos/gestion_fianza.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
 
 class HistorialPagos extends StatefulWidget {
   const HistorialPagos({super.key});
@@ -254,6 +259,10 @@ class _HistorialPagosState extends State<HistorialPagos>
               ? PopupMenuButton(
                   itemBuilder: (_) => [
                     const PopupMenuItem(
+                      value: 'compartir',
+                      child: Text('Compartir'),
+                    ),
+                    const PopupMenuItem(
                       value: 'editar',
                       child: Text('Editar forma de pago'),
                     ),
@@ -263,10 +272,12 @@ class _HistorialPagosState extends State<HistorialPagos>
                     ),
                   ],
                   onSelected: (value) {
+                    if (value == 'compartir') {
+                      _compartirDeuda(id, data);
+                    }
                     if (value == 'editar') {
                       _editarDeuda(id, data);
                     }
-
                     if (value == 'eliminar') {
                       _eliminarIndividual(id);
                     }
@@ -276,6 +287,95 @@ class _HistorialPagosState extends State<HistorialPagos>
         ),
       ),
     );
+  }
+
+  Future<void> _compartirDeuda(
+    String deudaId,
+    Map<String, dynamic> data,
+  ) async {
+    final pdf = pw.Document();
+
+    final historial = List<Map<String, dynamic>>.from(data['historial'] ?? []);
+
+    final cliente = data['cliente'];
+
+    final nombre = cliente != null
+        ? cliente['nombre'] ?? 'Sin nombre'
+        : 'Sin cliente';
+
+    final pedido = data['numero_pedido'] ?? '---';
+
+    pdf.addPage(
+      pw.Page(
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                '$nombre - Pedido #$pedido',
+                style: pw.TextStyle(
+                  fontSize: 28,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+
+              pw.SizedBox(height: 15),
+              pw.Text(
+                'Total: \$${data['total'].toInt()}',
+                style: pw.TextStyle(fontSize: 20),
+              ),
+              pw.Text(
+                'Pagado: \$${data['pagado'].toInt()}',
+                style: pw.TextStyle(fontSize: 20),
+              ),
+              pw.Text(
+                'Saldo: \$${data['saldo'].toInt()}',
+                style: pw.TextStyle(fontSize: 20),
+              ),
+              pw.Divider(),
+              pw.Text(
+                'Detalle de pagos',
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 28,
+                ),
+              ),
+
+              pw.SizedBox(height: 10),
+              ...historial.map((item) {
+                final fecha = (item['fecha'] as Timestamp).toDate();
+                final monto = item['monto'];
+                final tipo = item['tipo'] == 'cuota' ? 'Cuota' : 'Aporte';
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 8),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        '$tipo - \$${monto.toInt()}',
+                        style: pw.TextStyle(fontSize: 20),
+                      ),
+                      pw.Text(
+                        '${fecha.day}/${fecha.month}/${fecha.year}',
+                        style: pw.TextStyle(fontSize: 20),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          );
+        },
+      ),
+    );
+
+    final directory = await getTemporaryDirectory();
+
+    final file = File('${directory.path}/historial_pago.pdf');
+
+    await file.writeAsBytes(await pdf.save());
+
+    await Share.shareXFiles([XFile(file.path)], text: 'Historial de pagos');
   }
 
   // ========================
