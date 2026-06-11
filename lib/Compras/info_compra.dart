@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 
 class InfoCompra extends StatefulWidget {
   final DocumentSnapshot compra;
@@ -74,7 +75,6 @@ class _InfoCompraState extends State<InfoCompra> {
       _celdasResaltadas[key] = true;
     });
 
-    // quitar highlight después de un tiempo
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted) return;
       setState(() {
@@ -227,135 +227,206 @@ class _InfoCompraState extends State<InfoCompra> {
     return null;
   }
 
-  Future<void> _generarPDF(
-    List productos,
-    String concurrencia,
-    String fechaCom,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    // Solicitar permiso de almacenamiento (solo Android)
-    if (Platform.isAndroid) {
-      final status = await Permission.manageExternalStorage.request();
+  Future<File?> _generarPDF(Map<String, dynamic> data) async {
+    try {
+      final productos = data['productos'];
+      final concurrencia = data['concurrencia'];
+      double totalCompra = (data['total_compra'] ?? 0).toDouble();
+      String fechaA;
+      final fechaCom = data['fecha'];
+      if (fechaCom is Timestamp) {
+        fechaA = fechaCom.toDate().toIso8601String().split('T').first;
+      } else if (fechaCom is String) {
+        fechaA =
+            DateTime.tryParse(fechaCom)?.toIso8601String().split('T').first ??
+            '';
+      } else {
+        fechaA = 'Sin fecha';
+      }
 
-      if (!status.isGranted) {
+      final messenger = ScaffoldMessenger.of(context);
+      // Solicitar permiso de almacenamiento (solo Android)
+      if (Platform.isAndroid) {
+        final status = await Permission.manageExternalStorage.request();
+
+        if (!status.isGranted) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Permiso de almacenamiento denegado')),
+          );
+          return null;
+        }
+      }
+
+      final pdf = pw.Document();
+
+      double gananciaTotalCompra = 0;
+
+      for (var p in productos) {
+        final tipoCompra = p['tipo_compra'] ?? 'normal';
+
+        if (tipoCompra == 'flete') {
+          final compra = (p['precio_compra'] ?? 0).toDouble();
+          final base = (p['precio_por_defecto'] ?? 0).toDouble();
+
+          int cantidadTotal = 0;
+
+          (p['cantidades'] as Map<String, dynamic>? ?? {}).forEach((
+            key,
+            value,
+          ) {
+            cantidadTotal += (value as int);
+          });
+
+          gananciaTotalCompra += (compra - base) * cantidadTotal;
+        }
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            final widgets = <pw.Widget>[];
+
+            widgets.add(
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    "Reporte de Compra",
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Row(
+                    children: [
+                      pw.Expanded(flex: 3, child: pw.Text("Fecha: $fechaA")),
+                      pw.Expanded(
+                        flex: 4,
+                        child: pw.Text(
+                          "Total compra: \$${totalCompra.toStringAsFixed(0)}",
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 5,
+                        child: pw.Text(
+                          "Ganancia total: \$${gananciaTotalCompra.toStringAsFixed(0)}",
+                          style: pw.TextStyle(
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                            color: gananciaTotalCompra >= 0
+                                ? PdfColors.green
+                                : PdfColors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Text("Concurrencia: $concurrencia"),
+                  pw.SizedBox(height: 20),
+
+                  // Generar tabla según la concurrencia
+                  _tablaPDF(productos, concurrencia),
+                  pw.SizedBox(height: 20),
+                  pw.Text(
+                    "Detalle de Ganancias",
+                    style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 10),
+
+                  ..._detalleGananciasPDF(productos),
+                ],
+              ),
+            );
+
+            return widgets;
+          },
+        ),
+      );
+
+      // Guardar en el dispositivo
+      final directory = await getDownloadsDirectory();
+      if (directory == null) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Permiso de almacenamiento denegado')),
+          const SnackBar(
+            content: Text('No se pudo acceder a la carpeta Downloads'),
+          ),
+        );
+        return null;
+      }
+      final folder = Directory('${directory.path}/MisReportes');
+      if (!await folder.exists()) {
+        await folder.create(recursive: true);
+      }
+
+      final now = DateTime.now();
+
+      final formatted =
+          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}_${now.hour}_${now.minute}_${now.second}";
+
+      final file = File('${folder.path}/reporte_compra_$formatted.pdf');
+      await file.writeAsBytes(await pdf.save());
+      return file;
+    } catch (e) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error al generar PDF: $e")));
+      return null;
+    }
+  }
+
+  Future<void> _generarYCompartirPDF(Map<String, dynamic> data) async {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Expanded(child: Text("Abriendo opciones para compartir...")),
+            ],
+          ),
+        );
+      },
+    );
+    try {
+      final file = await _generarPDF(data);
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+
+      if (file == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No se pudo generar el PDF")),
         );
         return;
       }
-    }
 
-    final pdf = pw.Document();
-
-    double gananciaTotalCompra = 0;
-
-    for (var p in productos) {
-      final tipoCompra = p['tipo_compra'] ?? 'normal';
-
-      if (tipoCompra == 'flete') {
-        final compra = (p['precio_compra'] ?? 0).toDouble();
-        final base = (p['precio_por_defecto'] ?? 0).toDouble();
-
-        int cantidadTotal = 0;
-
-        (p['cantidades'] as Map<String, dynamic>? ?? {}).forEach((key, value) {
-          cantidadTotal += (value as int);
-        });
-
-        gananciaTotalCompra += (compra - base) * cantidadTotal;
-      }
-    }
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.all(32),
-        build: (pw.Context context) {
-          final widgets = <pw.Widget>[];
-
-          widgets.add(
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  "Reporte de Compra",
-                  style: pw.TextStyle(
-                    fontSize: 24,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 10),
-                pw.Row(
-                  children: [
-                    pw.Expanded(flex: 4, child: pw.Text("Fecha: $fechaCom")),
-                    pw.SizedBox(width: 10),
-                    pw.Expanded(
-                      flex: 6,
-                      child: pw.Text(
-                        "Ganancia total: \$${gananciaTotalCompra.toStringAsFixed(0)}",
-                        style: pw.TextStyle(
-                          fontSize: 14,
-                          fontWeight: pw.FontWeight.bold,
-                          color: gananciaTotalCompra >= 0
-                              ? PdfColors.green
-                              : PdfColors.red,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 10),
-                pw.Text("Concurrencia: $concurrencia"),
-                pw.SizedBox(height: 20),
-
-                // Generar tabla según la concurrencia
-                _tablaPDF(productos, concurrencia),
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  "Detalle de Ganancias",
-                  style: pw.TextStyle(
-                    fontSize: 18,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 10),
-
-                ..._detalleGananciasPDF(productos),
-              ],
-            ),
-          );
-
-          return widgets;
-        },
-      ),
-    );
-
-    // Guardar en el dispositivo
-    final directory = await getDownloadsDirectory();
-    if (directory == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo acceder a la carpeta Downloads'),
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'application/pdf')],
+          text: 'Reporte de compra',
         ),
       );
-      return;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error al compartir PDF: $e')));
     }
-    final folder = Directory('${directory.path}/MisReportes');
-    if (!await folder.exists()) {
-      await folder.create(recursive: true);
-    }
-
-    final now = DateTime.now();
-
-    final formatted =
-        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}_${now.hour}_${now.minute}_${now.second}";
-
-    final file = File('${folder.path}/reporte_compra_$formatted.pdf');
-    await file.writeAsBytes(await pdf.save());
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text("PDF generado en: ${file.path}")));
   }
 
   Future<void> _mostrarDialogoCarga() async {
@@ -379,9 +450,7 @@ class _InfoCompraState extends State<InfoCompra> {
       ),
     );
 
-    if (confirmar != true) return;
-
-    if (!mounted) return;
+    if (confirmar != true || !mounted) return;
 
     showDialog(
       context: context,
@@ -392,7 +461,7 @@ class _InfoCompraState extends State<InfoCompra> {
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 20),
-              Flexible(child: Text("Generando catálogo...", softWrap: true)),
+              Flexible(child: Text("Generando PDF...", softWrap: true)),
             ],
           ),
         );
@@ -402,30 +471,27 @@ class _InfoCompraState extends State<InfoCompra> {
       final snapshot = await widget.compra.reference.get();
       final compraData = snapshot.data() as Map<String, dynamic>;
 
-      final productos = compraData['productos'] ?? [];
-      final concurrencia = compraData['concurrencia'] ?? 'diario';
-      String fechaCom;
-      final fechaCompra = compraData["fecha"];
+      final file = await _generarPDF(compraData);
 
-      if (fechaCompra is Timestamp) {
-        fechaCom = fechaCompra.toDate().toIso8601String().split('T').first;
-      } else if (fechaCompra is String) {
-        fechaCom =
-            DateTime.tryParse(
-              fechaCompra,
-            )?.toIso8601String().split('T').first ??
-            '';
+      if (!mounted) return;
+
+      navigator.pop();
+
+      if (file != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("PDF generado correctamente")));
       } else {
-        fechaCom = 'Sin fecha';
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No se pudo generar el PDF")),
+        );
       }
-
-      await _generarPDF(productos, concurrencia, fechaCom);
     } catch (e) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
-      navigator.pop(); // cerrar loader
+      navigator.pop();
     }
   }
 
@@ -571,8 +637,8 @@ class _InfoCompraState extends State<InfoCompra> {
     return lista;
   }
 
-  int _obtenerIndiceActual(String concurrencia) {
-    final now = DateTime.now();
+  int _obtenerIndiceActual(String concurrencia, DateTime? fechaReferencia) {
+    final fecha = fechaReferencia ?? DateTime.now();
 
     switch (concurrencia) {
       case "diario":
@@ -580,19 +646,19 @@ class _InfoCompraState extends State<InfoCompra> {
 
       case "semanal":
         // Lunes = 0, Domingo = 6
-        return now.weekday - 1;
+        return fecha.weekday - 1;
 
       case "mensual":
         // Semana del mes (0–5)
-        final now = DateTime.now();
-        final primerDia = DateTime(now.year, now.month, 1);
+        final primerDia = DateTime(fecha.year, fecha.month, 1);
 
-        final offset = primerDia.weekday - 1; // lunes = 0
-        return ((now.day + offset - 1) / 7).floor();
+        // lunes = 0
+        final offset = primerDia.weekday - 1;
+        return ((fecha.day + offset - 1) / 7).floor();
 
       case "anual":
         // Mes (0–11)
-        return now.month - 1;
+        return fecha.month - 1;
 
       default:
         return 0;
@@ -711,6 +777,61 @@ class _InfoCompraState extends State<InfoCompra> {
     }
   }
 
+  bool _mostrarAvisoProximoBloqueo(DateTime fechaCompra, String concurrencia) {
+    final now = DateTime.now();
+
+    switch (concurrencia) {
+      case "diario":
+        return false;
+
+      case "semanal":
+        final inicioSemana = fechaCompra.subtract(
+          Duration(days: fechaCompra.weekday - 1),
+        );
+
+        final finSemana = inicioSemana.add(const Duration(days: 6));
+
+        final diasRestantes = finSemana.difference(now).inDays;
+
+        return diasRestantes >= 0 && diasRestantes <= 2;
+
+      case "mensual":
+        final ultimoDiaMes = DateTime(
+          fechaCompra.year,
+          fechaCompra.month + 1,
+          0,
+        );
+
+        final primerDiaMes = DateTime(fechaCompra.year, fechaCompra.month, 1);
+
+        final primerWeekday = primerDiaMes.weekday - 1;
+
+        final totalSemanas = ((ultimoDiaMes.day + primerWeekday) / 7).ceil();
+
+        final indiceActual = _obtenerIndiceActual("mensual", now);
+
+        final primerDiaUltimaSemana =
+            (totalSemanas - 1) * 7 - primerWeekday + 1;
+
+        final diasUltimaSemana = ultimoDiaMes.day - primerDiaUltimaSemana + 1;
+
+        // Caso especial:
+        // última semana con 1 o 2 días
+        if (diasUltimaSemana <= 2) {
+          return indiceActual >= totalSemanas - 2;
+        }
+
+        // Comportamiento normal:
+        return indiceActual == totalSemanas - 1;
+
+      case "anual":
+        return now.month == 12;
+
+      default:
+        return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -768,6 +889,10 @@ class _InfoCompraState extends State<InfoCompra> {
           final concurrencia = data['concurrencia'] ?? 'diario';
 
           final bloqueado = _edicionBloqueada(fechaDate, concurrencia);
+          final mostrarAviso = _mostrarAvisoProximoBloqueo(
+            fechaDate,
+            concurrencia,
+          );
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -795,16 +920,30 @@ class _InfoCompraState extends State<InfoCompra> {
 
                 const SizedBox(height: 10),
 
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Productos",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                if (mostrarAviso && !bloqueado)
+                  Card(
+                    color: Colors.orange.shade100,
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orange,
+                      ),
+                      title: const Text(
+                        "Período próximo a finalizar",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        concurrencia == "semanal"
+                            ? "Quedan menos de 2 días para el cierre de la semana."
+                            : concurrencia == "mensual"
+                            ? "Se recomienda revisar y ajustar las cantidades antes del cierre mensual."
+                            : concurrencia == "anual"
+                            ? "Se recomienda realizar los ajustes finales del año."
+                            : "",
+                      ),
+                    ),
                   ),
-                ),
-
                 const SizedBox(height: 10),
-
                 Expanded(
                   child: Builder(
                     builder: (_) {
@@ -833,6 +972,7 @@ class _InfoCompraState extends State<InfoCompra> {
                             ref,
                             concurrencia,
                             bloqueado,
+                            fechaDate,
                           );
 
                         case "anual":
@@ -858,6 +998,21 @@ class _InfoCompraState extends State<InfoCompra> {
             ),
           );
         },
+      ),
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            tooltip: "Compartir pdf",
+            heroTag: "fab1",
+            onPressed: () {
+              _generarYCompartirPDF(
+                widget.compra.data() as Map<String, dynamic>,
+              );
+            },
+            child: const Icon(Icons.share_sharp),
+          ),
+        ],
       ),
     );
   }
@@ -934,7 +1089,10 @@ class _InfoCompraState extends State<InfoCompra> {
               ...dias.map((d) => DataColumn(label: Text(d))),
             ],
             rows: productos.map((p) {
-              final indiceActual = _obtenerIndiceActual(concurrencia);
+              final indiceActual = _obtenerIndiceActual(
+                concurrencia,
+                DateTime.now(),
+              );
               return DataRow(
                 cells: [
                   DataCell(
@@ -991,10 +1149,11 @@ class _InfoCompraState extends State<InfoCompra> {
     DocumentReference ref,
     String concurrencia,
     bool bloqueado,
+    DateTime fechaCompra,
   ) {
     final now = DateTime.now();
-    final totalSemanas = _semanasDelMes(now);
-    final indiceActual = _obtenerIndiceActual(concurrencia);
+    final totalSemanas = _semanasDelMes(fechaCompra);
+    final indiceActual = _obtenerIndiceActual(concurrencia, now);
 
     final semanas = List.generate(totalSemanas, (i) => "S${i + 1}");
 
@@ -1080,7 +1239,7 @@ class _InfoCompraState extends State<InfoCompra> {
       "Dic",
     ];
 
-    final indiceActual = _obtenerIndiceActual(concurrencia);
+    final indiceActual = _obtenerIndiceActual(concurrencia, DateTime.now());
 
     return Column(
       children: [
