@@ -1230,6 +1230,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                             'Todos'; // resetear usuario al cambiar fecha
                       });
                       _aplicarFiltros(); // esta única línea maneja un todo
+                      // Navigator.pop(context);  Cerrar el drawer
                     },
                     items: ['Todos', ..._fechasUnicas]
                         .map<DropdownMenuItem<String>>((String value) {
