@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:convex_bottom_bar/convex_bottom_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,6 +19,8 @@ class IniLayout extends StatefulWidget {
   @override
   State<IniLayout> createState() => _IniLayoutState();
 }
+
+enum CardAnimationType { bounce, rotate, shake, pulse, swing }
 
 class _IniLayoutState extends State<IniLayout> {
   String? nombre;
@@ -110,63 +115,83 @@ class _IniLayoutState extends State<IniLayout> {
             padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 8),
             child: Column(
               children: [
-                const SizedBox(height: 50),
+                const SizedBox(height: 30),
                 Text(
                   _isLoading
                       ? 'Bienvenid@ nombre del usuario'
                       : 'Bienvenid@ ${nombre ?? "Usuario"}',
                   style: const TextStyle(fontSize: 30),
                 ),
-                const SizedBox(height: 50),
-                ActionButtonWidget(
-                  nameButton: "Pedidos",
-                  actionButton: () {
-                    navigator.push(
-                      MaterialPageRoute(builder: (context) => const Pedidos()),
-                    );
-                  },
-                ),
-                const SizedBox(height: 50),
-                ActionButtonWidget(
-                  nameButton: "Productos",
-                  actionButton: () {
-                    navigator.push(
-                      MaterialPageRoute(
-                        builder: (context) => const Productos(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 50),
-                ActionButtonWidget(
-                  nameButton: "Clientes",
-                  actionButton: () {
-                    navigator.push(
-                      MaterialPageRoute(builder: (context) => const Clientes()),
-                    );
-                  },
-                ),
-                const SizedBox(height: 50),
-                ActionButtonWidget(
-                  nameButton: "Inventario",
-                  actionButton: () {
-                    navigator.push(
-                      MaterialPageRoute(
-                        builder: (context) => const Inventario(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 50),
-                ActionButtonWidget(
-                  nameButton: "Compra",
-                  actionButton: () {
-                    navigator.push(
-                      MaterialPageRoute(
-                        builder: (context) => const CompraVenta(),
-                      ),
-                    );
-                  },
+                const SizedBox(height: 30),
+                GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 1.1,
+                  children: [
+                    DashboardCard(
+                      title: "Pedidos",
+                      animationType: CardAnimationType.bounce,
+                      icon: Icons.pending_actions_sharp,
+                      onTap: () {
+                        navigator.push(
+                          MaterialPageRoute(
+                            builder: (context) => const Pedidos(),
+                          ),
+                        );
+                      },
+                    ),
+                    DashboardCard(
+                      title: "Productos",
+                      animationType: CardAnimationType.rotate,
+                      icon: Icons.category,
+                      onTap: () {
+                        navigator.push(
+                          MaterialPageRoute(
+                            builder: (context) => const Productos(),
+                          ),
+                        );
+                      },
+                    ),
+                    DashboardCard(
+                      title: "Clientes",
+                      animationType: CardAnimationType.shake,
+                      icon: Icons.people_outline,
+                      onTap: () {
+                        navigator.push(
+                          MaterialPageRoute(
+                            builder: (context) => const Clientes(),
+                          ),
+                        );
+                      },
+                    ),
+                    DashboardCard(
+                      title: "Inventario",
+                      animationType: CardAnimationType.pulse,
+                      icon: Icons.inventory_2_outlined,
+                      onTap: () {
+                        navigator.push(
+                          MaterialPageRoute(
+                            builder: (context) => const Inventario(),
+                          ),
+                        );
+                      },
+                    ),
+                    DashboardCard(
+                      title: "Compra",
+                      animationType: CardAnimationType.swing,
+                      icon: Icons.shopify_sharp,
+                      onTap: () {
+                        navigator.push(
+                          MaterialPageRoute(
+                            builder: (context) => const CompraVenta(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 50),
               ],
@@ -207,33 +232,168 @@ class _IniLayoutState extends State<IniLayout> {
   }
 }
 
-class ActionButtonWidget extends StatelessWidget {
-  const ActionButtonWidget({
+class DashboardCard extends StatefulWidget {
+  final String title;
+  final CardAnimationType animationType;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const DashboardCard({
     super.key,
-    required this.nameButton,
-    required this.actionButton,
+    required this.title,
+    required this.animationType,
+    required this.icon,
+    required this.onTap,
   });
 
-  final String nameButton;
-  final VoidCallback actionButton;
+  @override
+  State<DashboardCard> createState() => _DashboardCardState();
+}
+
+class _DashboardCardState extends State<DashboardCard>
+    with SingleTickerProviderStateMixin {
+  bool _pressed = false;
+  late AnimationController _controller;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+
+    _scheduleAnimation();
+  }
+
+  void _scheduleAnimation() {
+    final random = Random();
+
+    final delay = Duration(seconds: random.nextInt(5) + 2);
+
+    _timer = Timer(delay, () async {
+      try {
+        await _controller.forward();
+        await _controller.reverse();
+      } catch (_) {}
+
+      if (mounted) {
+        _scheduleAnimation();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white54, width: 2.0),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      width: double.infinity,
-      height: 70,
-      child: ElevatedButton(
-        onPressed: actionButton,
-        child: Text(
-          nameButton,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 20),
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      child: GestureDetector(
+        onTapDown: (_) {
+          setState(() => _pressed = true);
+        },
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () {
+          setState(() => _pressed = false);
+        },
+        child: AnimatedScale(
+          scale: _pressed ? 0.95 : 1,
+          duration: const Duration(milliseconds: 150),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  blurRadius: 8,
+                  color: Colors.black12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                buildAnimatedIcon(widget.icon),
+                const SizedBox(height: 10),
+                Text(
+                  widget.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget buildAnimatedIcon(IconData icon) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, child) {
+        switch (widget.animationType) {
+          case CardAnimationType.bounce:
+            return Transform.translate(
+              offset: Offset(0, -10 * sin(_controller.value * pi)),
+              child: Icon(
+                icon,
+                size: 50,
+                color: Theme.of(context).primaryColor,
+              ),
+            );
+          case CardAnimationType.rotate:
+            return Transform.rotate(
+              angle: _controller.value * 0.4,
+              child: Icon(
+                icon,
+                size: 50,
+                color: Theme.of(context).primaryColor,
+              ),
+            );
+          case CardAnimationType.shake:
+            return Transform.translate(
+              offset: Offset(sin(_controller.value * 20) * 5, 0),
+              child: Icon(
+                icon,
+                size: 50,
+                color: Theme.of(context).primaryColor,
+              ),
+            );
+          case CardAnimationType.pulse:
+            return Transform.scale(
+              scale: 1 + (_controller.value * 0.15),
+              child: Icon(
+                icon,
+                size: 50,
+                color: Theme.of(context).primaryColor,
+              ),
+            );
+          case CardAnimationType.swing:
+            return Transform.rotate(
+              angle: sin(_controller.value * pi) * 0.25,
+              child: Icon(
+                icon,
+                size: 50,
+                color: Theme.of(context).primaryColor,
+              ),
+            );
+        }
+      },
     );
   }
 }
