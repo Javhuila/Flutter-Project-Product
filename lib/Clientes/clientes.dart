@@ -177,6 +177,7 @@ class _ClientesState extends State<Clientes> with TickerProviderStateMixin {
   }
 
   void _filterClientes(String query) {
+    if (!mounted) return;
     setState(() {
       _filteredClientes = _allClientes.where((clienteDoc) {
         final cliente = clienteDoc.data() as Map<String, dynamic>;
