@@ -4,7 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_project_product/Inventario/inventario.dart';
+import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
 import 'package:intl/intl.dart';
 
 class AddProductInventario extends StatefulWidget {
@@ -431,6 +433,7 @@ class _AddProductInventarioState extends State<AddProductInventario> {
                       final producto = _productos[index];
                       final nombre = producto['nombre'] ?? 'Sin nombre';
                       final imageUrl = producto['imagen'] as String?;
+                      final dpr = MediaQuery.of(context).devicePixelRatio;
                       final seleccionado = _productosSeleccionados.contains(
                         producto,
                       );
@@ -442,7 +445,10 @@ class _AddProductInventarioState extends State<AddProductInventario> {
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: CachedNetworkImage(
-                                    imageUrl: imageUrl,
+                                    imageUrl: getOptimizedCloudinaryUrl(
+                                      imageUrl,
+                                    ),
+                                    filterQuality: FilterQuality.low,
                                     placeholder: (_, _) => const SizedBox(
                                       width: 60,
                                       height: 60,
@@ -451,11 +457,21 @@ class _AddProductInventarioState extends State<AddProductInventario> {
                                     width: 60,
                                     height: 60,
                                     fit: BoxFit.cover,
+                                    fadeInDuration: const Duration(
+                                      milliseconds: 150,
+                                    ),
+                                    fadeOutDuration: const Duration(
+                                      milliseconds: 100,
+                                    ),
+                                    memCacheHeight: (60 * dpr.toInt()),
+                                    memCacheWidth: (60 * dpr.toInt()),
+                                    useOldImageOnUrlChange: true,
                                     errorWidget: (context, url, error) =>
                                         const Icon(
                                           Icons.broken_image,
                                           size: 60,
                                         ),
+                                    cacheManager: CustomCacheManagerI.instance,
                                   ),
                                 )
                               : const Icon(Icons.image_not_supported, size: 60),
@@ -478,4 +494,18 @@ class _AddProductInventarioState extends State<AddProductInventario> {
       ),
     );
   }
+}
+
+class CustomCacheManagerI {
+  static const key = 'customCacheKey';
+
+  static final CacheManager instance = CacheManager(
+    Config(
+      key,
+      stalePeriod: const Duration(days: 7),
+      maxNrOfCacheObjects: 100,
+      repo: JsonCacheInfoRepository(databaseName: key),
+      fileService: HttpFileService(),
+    ),
+  );
 }
