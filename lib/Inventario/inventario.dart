@@ -465,7 +465,7 @@ class _InventarioState extends State<Inventario> {
         final imageUrl = producto['imagen'];
 
         if (imageUrl != null && imageUrl.isNotEmpty) {
-          futures.add(CustomCacheManager.instance.downloadFile(imageUrl));
+          futures.add(CustomCacheManagerInv.instance.downloadFile(imageUrl));
           contador++;
         }
       }
@@ -534,7 +534,13 @@ class _InventarioState extends State<Inventario> {
                   ],
                 ),
               )
-            : Column(),
+            : SafeArea(
+                child: Column(
+                  children: [
+                    Text("Inventario", style: TextStyle(fontSize: 40)),
+                  ],
+                ),
+              ),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -877,7 +883,7 @@ class _InventarioState extends State<Inventario> {
                                                           useOldImageOnUrlChange:
                                                               true,
                                                           cacheManager:
-                                                              CustomCacheManager
+                                                              CustomCacheManagerInv
                                                                   .instance,
                                                           fit: BoxFit.cover,
                                                         ),
@@ -1025,7 +1031,7 @@ class _InventarioState extends State<Inventario> {
   }
 }
 
-class CustomCacheManager {
+class CustomCacheManagerInv {
   static const key = 'customCacheKey';
 
   static final CacheManager instance = CacheManager(
