@@ -328,6 +328,7 @@ class _AddPedidosState extends State<AddPedidos> {
                 child: ElevatedButton(
                   onPressed: () async {
                     if (_formKey.currentState!.validate()) {
+                      // Inhabilitar foco del teclado
                       FocusScope.of(context).unfocus();
                       await Navigator.push(
                         context,
@@ -339,6 +340,7 @@ class _AddPedidosState extends State<AddPedidos> {
                           ),
                         ),
                       );
+                      // Inhabilitar foco del teclado al volver
                       if (mounted) {
                         _clienteFocusNode.unfocus();
                       }
