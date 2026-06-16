@@ -314,23 +314,42 @@ class _AddCompraState extends State<AddCompra> {
                 if (!_productosCargados) const CircularProgressIndicator(),
                 Center(child: Text("Productos y precios")),
                 _buildAutocomplete(),
-                if (tipoCompra == TipoCompra.flete)
+                if (tipoCompra == TipoCompra.flete && productoId != null)
                   PrecioAutocompleteField(
                     controller: precioDefaultController,
                     typeBoard: TextInputType.number,
                     onChanged: () {},
                     labelTextInput: "Precio base",
                     ultimateIcon: Icon(Icons.monetization_on_outlined),
-                    storageKey: "historial_precio_base",
+                    storageKeyBuilder: () => PrecioHistorial.buildKey(
+                      productoId: productoId ?? "global",
+                      tipoCompra: tipoCompra.name,
+                      tipoPrecio: "base",
+                    ),
+                  )
+                else
+                  const Text(
+                    "Selecciona un producto para ingresar un precio",
+                    style: TextStyle(color: Colors.grey),
                   ),
+                // if (productoId != null)
                 PrecioAutocompleteField(
                   controller: precioController,
                   typeBoard: TextInputType.number,
                   onChanged: _calcularTotal,
                   labelTextInput: "Precio compra",
                   ultimateIcon: Icon(Icons.monetization_on_sharp),
-                  storageKey: "historial_precio_compra",
+                  storageKeyBuilder: () => PrecioHistorial.buildKey(
+                    productoId: productoId ?? "global",
+                    tipoCompra: tipoCompra.name,
+                    tipoPrecio: "compra",
+                  ),
                 ),
+                // else
+                //   const Text(
+                //     "Selecciona un producto para ver historial de precios",
+                //     style: TextStyle(color: Colors.grey),
+                //   ),
                 TextFormField(
                   controller: cantidadController,
                   decoration: const InputDecoration(
@@ -373,13 +392,21 @@ class _AddCompraState extends State<AddCompra> {
 
                     if (tipoCompra == TipoCompra.flete) {
                       await PrecioHistorial.guardarPrecio(
-                        "historial_precio_base",
+                        PrecioHistorial.buildKey(
+                          productoId: productoId!,
+                          tipoCompra: tipoCompra.name,
+                          tipoPrecio: "base",
+                        ),
                         precioDefaultController.text,
                       );
                     }
 
                     await PrecioHistorial.guardarPrecio(
-                      "historial_precio_compra",
+                      PrecioHistorial.buildKey(
+                        productoId: productoId!,
+                        tipoCompra: tipoCompra.name,
+                        tipoPrecio: "compra",
+                      ),
                       precioController.text,
                     );
                     // print("Guardando precio: ${precioController.text}");
@@ -576,7 +603,7 @@ class _AddCompraState extends State<AddCompra> {
                                   ),
                               errorWidget: (context, url, error) =>
                                   const Icon(Icons.broken_image, size: 40),
-                              cacheManager: CustomCacheManager.instance,
+                              cacheManager: CustomCacheManagerCom.instance,
                             ),
                           )
                         : const Icon(Icons.image_not_supported, size: 40),
@@ -599,7 +626,7 @@ class PrecioAutocompleteField extends StatefulWidget {
   final TextInputType typeBoard;
   final Widget? ultimateIcon;
   final String labelTextInput;
-  final String storageKey;
+  final String Function() storageKeyBuilder;
 
   const PrecioAutocompleteField({
     super.key,
@@ -608,7 +635,7 @@ class PrecioAutocompleteField extends StatefulWidget {
     required this.typeBoard,
     required this.ultimateIcon,
     required this.labelTextInput,
-    required this.storageKey,
+    required this.storageKeyBuilder,
   });
 
   @override
@@ -628,11 +655,15 @@ class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
   @override
   void didUpdateWidget(covariant PrecioAutocompleteField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _cargarHistorial();
+    if (oldWidget.storageKeyBuilder() != widget.storageKeyBuilder()) {
+      _cargarHistorial();
+    }
   }
 
   Future<void> _cargarHistorial() async {
-    historial = await PrecioHistorial.obtenerHistorial(widget.storageKey);
+    historial = await PrecioHistorial.obtenerHistorial(
+      widget.storageKeyBuilder(),
+    );
     // print("Historial cargado: $historial");
     setState(() {});
   }
@@ -696,7 +727,10 @@ class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
             widget.onChanged();
           },
           onFieldSubmitted: (value) async {
-            await PrecioHistorial.guardarPrecio(widget.storageKey, value);
+            await PrecioHistorial.guardarPrecio(
+              widget.storageKeyBuilder(),
+              value,
+            );
             await _cargarHistorial();
           },
           validator: (value) {
@@ -745,7 +779,7 @@ class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
   }
 }
 
-class CustomCacheManager {
+class CustomCacheManagerCom {
   static const key = 'customCacheKey';
 
   static final CacheManager instance = CacheManager(
