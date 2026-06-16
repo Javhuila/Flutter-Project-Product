@@ -2,6 +2,14 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PrecioHistorial {
+  static String buildKey({
+    required String productoId,
+    required String tipoCompra,
+    required String tipoPrecio,
+  }) {
+    return "${productoId}_${tipoCompra}_$tipoPrecio";
+  }
+
   static Future<List<Map<String, dynamic>>> obtenerHistorial(String key) async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString(key);
