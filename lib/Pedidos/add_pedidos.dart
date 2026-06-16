@@ -22,6 +22,7 @@ class _AddPedidosState extends State<AddPedidos> {
 
   List<String> _clienteList = [];
   bool _isLoadingClientes = true;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _clientesDocs = [];
 
   final FocusNode _clienteFocusNode = FocusNode();
 
@@ -38,6 +39,30 @@ class _AddPedidosState extends State<AddPedidos> {
     return result.toLowerCase().trim();
   }
 
+  Future<void> _cargarClientesBase() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser.uid)
+        .get();
+
+    String adminId = currentUser.uid;
+
+    if (userDoc.exists && userDoc.data()!.containsKey('adminId')) {
+      adminId = userDoc['adminId'];
+    }
+
+    final clientesSnapshot = await FirebaseFirestore.instance
+        .collection('clientes')
+        .where('adminId', isEqualTo: adminId)
+        .orderBy('nombre')
+        .get();
+
+    _clientesDocs = clientesSnapshot.docs;
+  }
+
   Future<void> _loadClientes(DateTime fechaSeleccionada) async {
     if (!mounted) return;
     setState(() {
@@ -46,17 +71,6 @@ class _AddPedidosState extends State<AddPedidos> {
 
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
-
-    // Obtener adminId si el usuario es asistente
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUser.uid)
-        .get();
-
-    String adminId = currentUser.uid; // Por defecto, el usuario actual es admin
-    if (userDoc.exists && userDoc.data()!.containsKey('adminId')) {
-      adminId = userDoc['adminId'];
-    }
 
     // Obtener pedidos en la fecha seleccionada
     final pedidosSnapshot = await FirebaseFirestore.instance
@@ -76,13 +90,7 @@ class _AddPedidosState extends State<AddPedidos> {
         .toSet();
 
     // Obtener solo los clientes del admin actual
-    final clientesSnapshot = await FirebaseFirestore.instance
-        .collection('clientes')
-        .where('adminId', isEqualTo: adminId)
-        .orderBy('nombre')
-        .get();
-
-    final todosLosClientes = clientesSnapshot.docs.map((doc) {
+    final todosLosClientes = _clientesDocs.map((doc) {
       // Obtener nombre y apellido
       final nombre = doc['nombre']?.toString() ?? '';
       final apellido = doc['apellido']?.toString() ?? '';
@@ -90,7 +98,7 @@ class _AddPedidosState extends State<AddPedidos> {
     }).toList();
 
     final mapaTipo = {
-      for (var doc in clientesSnapshot.docs)
+      for (var doc in _clientesDocs)
         '${doc['nombre']} ${doc['apellido']}': (doc['tipo'] ?? 'Normal')
             .toString(),
     };
@@ -127,7 +135,10 @@ class _AddPedidosState extends State<AddPedidos> {
     _fechaGeneralController.text = formattedDate;
 
     // Llamar a la función que carga los clientes para esa fecha
-    _loadClientes(fechaActual);
+    Future.microtask(() async {
+      await _cargarClientesBase();
+      await _loadClientes(fechaActual);
+    });
   }
 
   @override
@@ -253,8 +264,8 @@ class _AddPedidosState extends State<AddPedidos> {
                           onChanged: (value) {
                             setState(() {
                               _selectedclienteList = value;
-                              _tipoClienteSeleccionado =
-                                  _mapaClientesTipo[value] ?? 'Normal';
+                              // _tipoClienteSeleccionado =
+                              //     _mapaClientesTipo[value] ?? 'Normal';
                             });
                           },
                         );
@@ -315,9 +326,10 @@ class _AddPedidosState extends State<AddPedidos> {
                 width: double.infinity,
                 height: 70,
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (_formKey.currentState!.validate()) {
-                      Navigator.push(
+                      FocusScope.of(context).unfocus();
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => ProductLoad(
@@ -327,6 +339,9 @@ class _AddPedidosState extends State<AddPedidos> {
                           ),
                         ),
                       );
+                      if (mounted) {
+                        _clienteFocusNode.unfocus();
+                      }
                     }
                   },
                   child: const Text(
