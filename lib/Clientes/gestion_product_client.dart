@@ -112,7 +112,6 @@ class _GestionProductClientState extends State<GestionProductClient> {
 
     if (snapshot.docs.isNotEmpty) {
       _lastDocument = snapshot.docs.last;
-      _productos.addAll(snapshot.docs);
     } else {
       _hasMore = false;
     }
@@ -316,6 +315,8 @@ class _GestionProductClientState extends State<GestionProductClient> {
                               .toDouble();
                           final precioEspecial = _preciosEspeciales[productoId];
                           final dpr = MediaQuery.of(context).devicePixelRatio;
+                          final tienePrecioEspecial = _preciosEspeciales
+                              .containsKey(productoId);
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -348,14 +349,26 @@ class _GestionProductClientState extends State<GestionProductClient> {
                                       memCacheWidth: (60 * dpr).toInt(),
                                       memCacheHeight: (60 * dpr).toInt(),
                                       useOldImageOnUrlChange: true,
-                                      cacheManager: CustomCacheManager.instance,
+                                      cacheManager:
+                                          CustomCacheManagerGPC.instance,
                                       fit: BoxFit.cover,
                                     )
                                   : const Icon(
                                       Icons.image_not_supported,
                                       size: 50,
                                     ),
-                              title: Text(nombre),
+                              title: Row(
+                                children: [
+                                  Expanded(child: Text(nombre)),
+                                  if (tienePrecioEspecial)
+                                    const Icon(
+                                      Icons.star,
+                                      color: Colors.amber,
+                                      size: 18,
+                                    ),
+                                ],
+                              ),
+
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -413,7 +426,7 @@ class _GestionProductClientState extends State<GestionProductClient> {
   }
 }
 
-class CustomCacheManager {
+class CustomCacheManagerGPC {
   static const key = 'customCacheKey';
 
   static final CacheManager instance = CacheManager(
