@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Pedidos/edit_pedidos.dart';
-import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
+// import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
 import 'dart:io';
 import 'package:flutter/services.dart' show NetworkAssetBundle, MethodChannel;
 import 'package:pdf/pdf.dart';
@@ -21,7 +21,7 @@ class InfoPedido extends StatefulWidget {
 }
 
 class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
-  ReceiptController? _receiptController;
+  // ReceiptController? _receiptController;
 
   late AnimationController _animationController;
   late Animation<Offset> _offsetAnimation;
@@ -256,11 +256,17 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                   children: [
                     pw.Text(
                       "Realizado por: ${adminNombre ?? 'Administrador'}",
-                      style: pw.TextStyle(fontSize: 20),
+                      style: pw.TextStyle(
+                        fontSize: 20,
+                        color: PdfColors.blueAccent700,
+                      ),
                     ),
                     pw.Text(
                       adminTelefono ?? '',
-                      style: pw.TextStyle(fontSize: 20),
+                      style: pw.TextStyle(
+                        fontSize: 20,
+                        color: PdfColors.redAccent700,
+                      ),
                     ),
                   ],
                 ),
@@ -274,12 +280,19 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Fecha: $fecha', style: pw.TextStyle(fontSize: 28)),
+                  pw.Text(
+                    'Fecha: $fecha',
+                    style: pw.TextStyle(
+                      fontSize: 28,
+                      color: PdfColors.blueAccent700,
+                    ),
+                  ),
                   pw.Text(
                     'N° $numPedido',
                     style: pw.TextStyle(
                       fontSize: 33,
                       fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.redAccent700,
                     ),
                   ),
                 ],
@@ -290,12 +303,13 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
               pw.Row(
                 children: [
                   pw.Expanded(
-                    flex: 7, // 🔥 50%
+                    flex: 7,
                     child: pw.Text(
                       'Cliente: $cliente',
                       style: pw.TextStyle(
                         fontSize: 35,
                         fontNormal: pw.Font.helvetica(),
+                        color: PdfColors.blue700,
                       ),
                       maxLines: 2,
                       softWrap: true,
@@ -304,11 +318,14 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                   ),
                   pw.SizedBox(width: 10),
                   pw.Expanded(
-                    flex: 3, // 🔥 50%
+                    flex: 3,
                     child: pw.Text(
                       'Tel: ${clienteTelefono ?? ''}',
                       textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(fontSize: 22),
+                      style: pw.TextStyle(
+                        fontSize: 22,
+                        color: PdfColors.redAccent700,
+                      ),
                     ),
                   ),
                 ],
@@ -928,14 +945,14 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                 child: const Icon(Icons.share_sharp),
               ),
               SizedBox(width: 16),
-              FloatingActionButton(
-                tooltip: "Imprimir pedido",
-                heroTag: "fab2",
-                onPressed: () {
-                  _showReceiptPreview(data);
-                },
-                child: const Icon(Icons.local_print_shop_rounded),
-              ),
+              // FloatingActionButton(
+              //   tooltip: "Imprimir pedido",
+              //   heroTag: "fab2",
+              //   onPressed: () {
+              //     _showReceiptPreview(data);
+              //   },
+              //   child: const Icon(Icons.local_print_shop_rounded),
+              // ),
               SizedBox(width: 16),
               FloatingActionButton(
                 tooltip: "Compartir pedido directo",
@@ -954,138 +971,138 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
     );
   }
 
-  void _showReceiptPreview(Map<String, dynamic> data) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Vista de Impresión"),
-          content: SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.5,
-              ),
-              child: _buildReceiptLayout(data),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text("Cancelar"),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            ElevatedButton(
-              child: const Text("Imprimir"),
-              onPressed: () => _printPedido(context),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  // void _showReceiptPreview(Map<String, dynamic> data) {
+  //   showDialog(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return AlertDialog(
+  //         title: const Text("Vista de Impresión"),
+  //         content: SingleChildScrollView(
+  //           child: ConstrainedBox(
+  //             constraints: BoxConstraints(
+  //               maxHeight: MediaQuery.of(context).size.height * 0.5,
+  //             ),
+  //             child: _buildReceiptLayout(data),
+  //           ),
+  //         ),
+  //         actions: <Widget>[
+  //           TextButton(
+  //             child: const Text("Cancelar"),
+  //             onPressed: () {
+  //               Navigator.of(context).pop();
+  //             },
+  //           ),
+  //           ElevatedButton(
+  //             child: const Text("Imprimir"),
+  //             onPressed: () => _printPedido(context),
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
 
-  Widget _buildReceiptLayout(Map<String, dynamic> data) {
-    final productos = data['productos'] as List<dynamic>? ?? [];
-    final cliente = data['cliente'] ?? '';
-    late final String fecha;
+  // Widget _buildReceiptLayout(Map<String, dynamic> data) {
+  //   final productos = data['productos'] as List<dynamic>? ?? [];
+  //   final cliente = data['cliente'] ?? '';
+  //   late final String fecha;
 
-    final fechaData = data['fecha'];
-    if (fechaData is Timestamp) {
-      fecha = fechaData.toDate().toString().split(' ')[0];
-    } else if (fechaData is String) {
-      fecha = DateTime.tryParse(fechaData)?.toString().split(' ')[0] ?? '';
-    } else {
-      fecha = 'Sin fecha';
-    }
-    final numPedido = data['numero_pedido'] ?? '';
-    final observacion = data['observacion'] ?? '';
-    final valorTotal = data['valor_total'] ?? 0;
+  //   final fechaData = data['fecha'];
+  //   if (fechaData is Timestamp) {
+  //     fecha = fechaData.toDate().toString().split(' ')[0];
+  //   } else if (fechaData is String) {
+  //     fecha = DateTime.tryParse(fechaData)?.toString().split(' ')[0] ?? '';
+  //   } else {
+  //     fecha = 'Sin fecha';
+  //   }
+  //   final numPedido = data['numero_pedido'] ?? '';
+  //   final observacion = data['observacion'] ?? '';
+  //   final valorTotal = data['valor_total'] ?? 0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Recibo de Pedido N° ${(numPedido)}",
-          style: TextStyle(fontSize: 22),
-        ),
-        Text("Cliente: $cliente"),
-        Text("Fecha: $fecha"),
-        const SizedBox(height: 8),
-        const Text("Observación:"),
-        Text(observacion),
-        const Divider(),
-        const Text("Detalle:", style: TextStyle(fontWeight: FontWeight.bold)),
-        Row(
-          children: [
-            Expanded(flex: 2, child: Text("Producto")),
-            Expanded(
-              flex: 1,
-              child: Text("Cantidad", textAlign: TextAlign.center),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text("Valor c/u", textAlign: TextAlign.end),
-            ),
-            Expanded(flex: 2, child: Text("Total", textAlign: TextAlign.end)),
-          ],
-        ),
-        ...productos.map((prod) {
-          return Row(
-            children: [
-              Expanded(flex: 2, child: Text("${prod['nombre']}")),
-              Expanded(
-                flex: 1,
-                child: Text(
-                  "×${prod['cantidad']}",
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text("\$${prod['precio']}", textAlign: TextAlign.end),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text("\$${prod['total']}", textAlign: TextAlign.end),
-              ),
-            ],
-          );
-        }),
-        const SizedBox(height: 15),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                "Total: ",
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                "\$${(valorTotal).toStringAsFixed(2)}",
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       Text(
+  //         "Recibo de Pedido N° ${(numPedido)}",
+  //         style: TextStyle(fontSize: 22),
+  //       ),
+  //       Text("Cliente: $cliente"),
+  //       Text("Fecha: $fecha"),
+  //       const SizedBox(height: 8),
+  //       const Text("Observación:"),
+  //       Text(observacion),
+  //       const Divider(),
+  //       const Text("Detalle:", style: TextStyle(fontWeight: FontWeight.bold)),
+  //       Row(
+  //         children: [
+  //           Expanded(flex: 2, child: Text("Producto")),
+  //           Expanded(
+  //             flex: 1,
+  //             child: Text("Cantidad", textAlign: TextAlign.center),
+  //           ),
+  //           Expanded(
+  //             flex: 2,
+  //             child: Text("Valor c/u", textAlign: TextAlign.end),
+  //           ),
+  //           Expanded(flex: 2, child: Text("Total", textAlign: TextAlign.end)),
+  //         ],
+  //       ),
+  //       ...productos.map((prod) {
+  //         return Row(
+  //           children: [
+  //             Expanded(flex: 2, child: Text("${prod['nombre']}")),
+  //             Expanded(
+  //               flex: 1,
+  //               child: Text(
+  //                 "×${prod['cantidad']}",
+  //                 textAlign: TextAlign.center,
+  //               ),
+  //             ),
+  //             Expanded(
+  //               flex: 2,
+  //               child: Text("\$${prod['precio']}", textAlign: TextAlign.end),
+  //             ),
+  //             Expanded(
+  //               flex: 2,
+  //               child: Text("\$${prod['total']}", textAlign: TextAlign.end),
+  //             ),
+  //           ],
+  //         );
+  //       }),
+  //       const SizedBox(height: 15),
+  //       Row(
+  //         children: [
+  //           Expanded(
+  //             child: Text(
+  //               "Total: ",
+  //               style: const TextStyle(fontWeight: FontWeight.bold),
+  //             ),
+  //           ),
+  //           Expanded(
+  //             child: Text(
+  //               "\$${(valorTotal).toStringAsFixed(2)}",
+  //               textAlign: TextAlign.end,
+  //               style: const TextStyle(fontWeight: FontWeight.bold),
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ],
+  //   );
+  // }
 
-  Future<void> _printPedido(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
+  // Future<void> _printPedido(BuildContext context) async {
+  //   final messenger = ScaffoldMessenger.of(context);
 
-    final device = await FlutterBluetoothPrinter.selectDevice(context);
-    if (device != null) {
-      await _receiptController?.print(address: device.address);
-    } else {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('No se seleccionó impresora')),
-      );
-    }
-  }
+  //   final device = await FlutterBluetoothPrinter.selectDevice(context);
+  //   if (device != null) {
+  //     await _receiptController?.print(address: device.address);
+  //   } else {
+  //     messenger.showSnackBar(
+  //       const SnackBar(content: Text('No se seleccionó impresora')),
+  //     );
+  //   }
+  // }
 
   Widget _buildInfoDeuda() {
     if (_cargandoDeuda) {
