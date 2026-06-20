@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,13 +26,16 @@ class _InventarioState extends State<Inventario> {
 
   List<DocumentSnapshot> productosSeleccionados = [];
 
+  String? uid;
+  String? adminId;
   String? _userRole;
   bool _cargando = true;
-
+  String _textoBusqueda = '';
+  Timer? _debounce;
   final Set<String> _fechasExpandidasCompletas = {};
 
-  Map<String, bool> _modoSeleccionPorFecha = {};
-  Map<String, Set<String>> _seleccionadosPorFecha = {};
+  final Map<String, bool> _modoSeleccionPorFecha = {};
+  final Map<String, Set<String>> _seleccionadosPorFecha = {};
 
   @override
   void initState() {
@@ -38,10 +43,17 @@ class _InventarioState extends State<Inventario> {
     _inicializarInventario();
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
   Future<void> _inicializarInventario() async {
     if (!mounted) return;
     setState(() => _cargando = true);
-    await _loadUserRole();
+    await _cargarDatosUsuario();
     await _crearInventarioDelDia();
     _precacheImagenes();
     await _aplicarPoliticaRetencionInventario();
@@ -51,33 +63,29 @@ class _InventarioState extends State<Inventario> {
     setState(() => _cargando = false);
   }
 
-  Future<void> _loadUserRole() async {
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
+  Future<void> _cargarDatosUsuario() async {
+    final user = FirebaseAuth.instance.currentUser;
 
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+    if (user == null) return;
 
-      if (doc.exists) {
-        setState(() {
-          _userRole = doc['role'];
-          _cargando = false;
-        });
-      } else {
-        setState(() {
-          _userRole = 'asistente'; // fallback
-          _cargando = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _userRole = 'asistente'; // fallback en caso de error
-        _cargando = false;
-      });
+    uid = user.uid;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (!doc.exists) {
+      _userRole = 'asistente';
+      adminId = user.uid;
+      return;
     }
+
+    final data = doc.data()!;
+
+    _userRole = data['role'] ?? 'asistente';
+
+    adminId = data['adminId'] ?? user.uid;
   }
 
   bool _esHoy(String fecha) {
@@ -212,37 +220,10 @@ class _InventarioState extends State<Inventario> {
     }
   }
 
-  Future<int> _obtenerVentasDelDia(String nombreProducto) async {
-    final firestore = FirebaseFirestore.instance;
-
-    // Rango de tiempo del día actual (00:00:00 - 23:59:59)
-    final now = DateTime.now();
-    final inicioDelDia = DateTime(now.year, now.month, now.day, 0, 0, 0);
-    final finDelDia = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-    // Busca pedidos creados hoy (usando rango de fechas)
-    final pedidosSnapshot = await firestore
-        .collection('pedidos')
-        .where('fecha', isGreaterThanOrEqualTo: inicioDelDia)
-        .where('fecha', isLessThanOrEqualTo: finDelDia)
-        .get();
-
-    int totalVentas = 0;
-
-    for (var pedido in pedidosSnapshot.docs) {
-      final productos = List<Map<String, dynamic>>.from(pedido['productos']);
-      for (var p in productos) {
-        if (p['nombre'] == nombreProducto) {
-          totalVentas += (p['cantidad'] ?? 0) as int;
-        }
-      }
-    }
-
-    return totalVentas;
-  }
-
   /// Actualiza automáticamente los campos "venta" y "residuo"
   Future<void> _actualizarVentasYResiduos() async {
+    final ventas = await _obtenerVentasAgrupadas();
+
     final inventarioRef = FirebaseFirestore.instance
         .collection('inventario')
         .doc(fechaHoy)
@@ -255,7 +236,7 @@ class _InventarioState extends State<Inventario> {
       final cantidad = (data['cantidad'] ?? 0) as int;
       final nombre = data['nombre'] ?? '';
 
-      final venta = await _obtenerVentasDelDia(nombre);
+      final venta = ventas[nombre] ?? 0;
       final residuo = cantidad - venta;
 
       await prod.reference.update({
@@ -473,6 +454,37 @@ class _InventarioState extends State<Inventario> {
     await Future.wait(futures);
   }
 
+  Future<Map<String, int>> _obtenerVentasAgrupadas() async {
+    final firestore = FirebaseFirestore.instance;
+
+    // Rango de tiempo del día actual (00:00:00 - 23:59:59)
+    final now = DateTime.now();
+
+    final inicioDelDia = DateTime(now.year, now.month, now.day);
+
+    final finDelDia = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    // Busca pedidos creados hoy (usando rango de fechas)
+    final pedidosSnapshot = await firestore
+        .collection('pedidos')
+        .where('fecha', isGreaterThanOrEqualTo: inicioDelDia)
+        .where('fecha', isLessThanOrEqualTo: finDelDia)
+        .get();
+
+    final Map<String, int> ventas = {};
+
+    for (var pedido in pedidosSnapshot.docs) {
+      final productos = List<Map<String, dynamic>>.from(pedido['productos']);
+
+      for (var p in productos) {
+        final nombre = p['nombre'];
+
+        ventas[nombre] = (ventas[nombre] ?? 0) + ((p['cantidad'] ?? 0) as int);
+      }
+    }
+
+    return ventas;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_cargando) {
@@ -552,7 +564,14 @@ class _InventarioState extends State<Inventario> {
                 controller: _searchController,
                 keyboardType: TextInputType.name,
                 onChanged: (value) {
-                  setState(() {}); // actualiza filtro en tiempo real
+                  _debounce?.cancel();
+                  _debounce = Timer(const Duration(milliseconds: 300), () {
+                    if (!mounted) return;
+
+                    setState(() {
+                      _textoBusqueda = value;
+                    });
+                  });
                 },
                 style: const TextStyle(
                   fontSize: 20,
@@ -627,9 +646,7 @@ class _InventarioState extends State<Inventario> {
                           }
 
                           final productos = productoSnapshot.data!.docs;
-                          final filtro = _searchController.text
-                              .trim()
-                              .toLowerCase();
+                          final filtro = _textoBusqueda.trim().toLowerCase();
 
                           final filtrados = productos.where((p) {
                             final nombre = (p['nombre'] ?? '')
