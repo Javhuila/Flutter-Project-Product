@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,18 +22,23 @@ class GestionProductClient extends StatefulWidget {
   State<GestionProductClient> createState() => _GestionProductClientState();
 }
 
+enum TipoFiltroProducto { todos, precioBase, preciosEspeciales }
+
 class _GestionProductClientState extends State<GestionProductClient> {
   final TextEditingController _searchController = TextEditingController();
-  final List<QueryDocumentSnapshot> _productos = [];
+  List<QueryDocumentSnapshot> _todosLosProductos = [];
   late Map<String, double> _preciosEspeciales = {};
+  List<QueryDocumentSnapshot> _resultadoCompleto = [];
   List<QueryDocumentSnapshot> _productosFiltrados = [];
 
-  final int _pageSize = 10;
-  final ScrollController _scrollController = ScrollController();
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
-  DocumentSnapshot? _lastDocument;
+  TipoFiltroProducto _tipoFiltro = TipoFiltroProducto.todos;
 
+  final int _pageSize = 10;
+  int _paginaActual = 0;
+  final ScrollController _scrollController = ScrollController();
+  bool isLoadingMore = false;
+  bool _hasMore = true;
+  bool _cargandoInicial = true;
   Timer? _debounce;
 
   @override
@@ -43,18 +49,29 @@ class _GestionProductClientState extends State<GestionProductClient> {
         (key, value) => MapEntry(key, (value as num).toDouble()),
       ),
     );
-    _loadProductos();
+    Future.microtask(() async {
+      await _cargarTodosLosProductos();
+      _aplicarFiltros();
+      if (mounted) {
+        setState(() {
+          _cargandoInicial = false;
+        });
+      }
+    });
 
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
               _scrollController.position.maxScrollExtent - 200 &&
-          !_isLoadingMore &&
-          _hasMore) {
-        if (_searchController.text.isNotEmpty) {
-          _buscarProductos(_searchController.text);
-        } else {
-          _loadProductos();
-        }
+          !isLoadingMore &&
+          _hayMasProductos) {
+        _cargarMasSegunFiltro();
+        // if (_tipoFiltro == TipoFiltroProducto.preciosEspeciales) {
+        //   _cargarMasEspeciales();
+        // } else if (_searchController.text.isNotEmpty) {
+        //   _buscarProductos(_searchController.text);
+        // } else {
+        //   _loadProductos();
+        // }
       }
     });
   }
@@ -72,59 +89,50 @@ class _GestionProductClientState extends State<GestionProductClient> {
     return result.toLowerCase().trim();
   }
 
-  Future<void> _loadProductos({bool reset = false}) async {
-    if (_isLoadingMore || (!_hasMore && !reset)) return;
-
-    setState(() => _isLoadingMore = true);
+  Future<void> _cargarTodosLosProductos() async {
+    if (_todosLosProductos.isNotEmpty) return;
 
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    if (reset) {
-      _productos.clear();
-      _productosFiltrados.clear();
-      _lastDocument = null;
-      _hasMore = true;
-    }
-
-    // Obtener adminId (ya sea admin o asistente)
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(currentUser.uid)
         .get();
 
     String adminId = currentUser.uid;
+
     if (userDoc.exists && userDoc.data()?['adminId'] != null) {
       adminId = userDoc['adminId'];
     }
 
-    Query query = FirebaseFirestore.instance
+    final snapshot = await FirebaseFirestore.instance
         .collection('productos')
         .where('adminId', isEqualTo: adminId)
         .orderBy('fecha_creacion', descending: true)
-        .limit(_pageSize);
+        .get();
 
-    if (_lastDocument != null && !reset) {
-      query = query.startAfterDocument(_lastDocument!);
-    }
+    _todosLosProductos = snapshot.docs;
+  }
 
-    final snapshot = await query.get();
+  void _aplicarPaginacion() {
+    final cantidadMostrar = (_paginaActual + 1) * _pageSize;
 
-    if (snapshot.docs.isNotEmpty) {
-      _lastDocument = snapshot.docs.last;
-    } else {
-      _hasMore = false;
-    }
-
-    if (snapshot.docs.length < _pageSize) {
-      _hasMore = false;
-    }
+    final fin = min(cantidadMostrar, _resultadoCompleto.length);
 
     setState(() {
-      _isLoadingMore = false;
-      _productos.addAll(snapshot.docs);
-      _productosFiltrados = List.from(_productos);
+      _productosFiltrados = _resultadoCompleto.sublist(0, fin);
+
+      _hasMore = fin < _resultadoCompleto.length;
     });
+  }
+
+  Future<void> _loadProductos() async {
+    if (!_hasMore) return;
+
+    _paginaActual++;
+
+    _aplicarPaginacion();
   }
 
   Future<void> _buscarProductos(String query) async {
@@ -132,45 +140,65 @@ class _GestionProductClientState extends State<GestionProductClient> {
 
     // Si la búsqueda está vacía, mostramos la lista paginada normal
     if (normalizedQuery.isEmpty) {
-      setState(() {
-        _productosFiltrados = List.from(_productos);
-        _hasMore = true;
-      });
+      _aplicarFiltros();
       return;
     }
 
-    // Si hay texto de búsqueda, traemos todos los productos y filtramos localmente
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
-
-    // Obtener adminId (igual que en _loadProductos)
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUser.uid)
-        .get();
-
-    String adminId = currentUser.uid;
-    if (userDoc.exists && userDoc.data()?['adminId'] != null) {
-      adminId = userDoc['adminId'];
-    }
-
-    // Traer *todos* los productos (sin límite)
-    final snapshot = await FirebaseFirestore.instance
-        .collection('productos')
-        .where('adminId', isEqualTo: adminId)
-        .get();
-
     // Filtrar aplicando normalización
-    final resultados = snapshot.docs.where((doc) {
-      final data = doc.data();
+    final resultados = _todosLosProductos.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+
       final nombre = _normalizeText(data['nombre'] ?? '');
+
       return nombre.contains(normalizedQuery);
     }).toList();
 
-    setState(() {
-      _productosFiltrados = resultados;
-      _hasMore = false; // desactivar "cargar más" mientras hay búsqueda activa
-    });
+    _aplicarFiltros(productosOrigen: resultados);
+  }
+
+  void _aplicarFiltros({List<QueryDocumentSnapshot>? productosOrigen}) async {
+    final origen = productosOrigen ?? _todosLosProductos;
+
+    List<QueryDocumentSnapshot> resultado = List.from(origen);
+
+    switch (_tipoFiltro) {
+      case TipoFiltroProducto.precioBase:
+        resultado = resultado.where((doc) {
+          return !_preciosEspeciales.containsKey(doc.id);
+        }).toList();
+        break;
+
+      case TipoFiltroProducto.preciosEspeciales:
+        resultado = resultado.where((doc) {
+          return _preciosEspeciales.containsKey(doc.id);
+        }).toList();
+        break;
+
+      case TipoFiltroProducto.todos:
+        break;
+    }
+
+    _resultadoCompleto = resultado;
+
+    _paginaActual = 0;
+
+    _aplicarPaginacion();
+  }
+
+  void _aplicarFiltroActual() {
+    if (_searchController.text.isNotEmpty) {
+      _buscarProductos(_searchController.text);
+    } else {
+      _aplicarFiltros();
+    }
+  }
+
+  void _cargarMasSegunFiltro() {
+    _loadProductos();
+  }
+
+  bool get _hayMasProductos {
+    return _hasMore;
   }
 
   void _editarPrecio(String productoId, double? precioActual) async {
@@ -251,7 +279,7 @@ class _GestionProductClientState extends State<GestionProductClient> {
                   onChanged: (value) {
                     if (_debounce?.isActive ?? false) _debounce?.cancel();
 
-                    _debounce = Timer(const Duration(milliseconds: 600), () {
+                    _debounce = Timer(const Duration(milliseconds: 300), () {
                       _buscarProductos(value); // Cada vez que se escribe, busca
                     });
                   },
@@ -264,15 +292,51 @@ class _GestionProductClientState extends State<GestionProductClient> {
                   ),
                 ),
                 const SizedBox(height: 15),
-                _productos.isEmpty
+                DropdownButtonFormField<TipoFiltroProducto>(
+                  initialValue: _tipoFiltro,
+                  decoration: InputDecoration(
+                    labelText: 'Filtrar productos',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: TipoFiltroProducto.todos,
+                      child: Text('Todos'),
+                    ),
+                    DropdownMenuItem(
+                      value: TipoFiltroProducto.precioBase,
+                      child: Text('Precio Base'),
+                    ),
+                    DropdownMenuItem(
+                      value: TipoFiltroProducto.preciosEspeciales,
+                      child: Text('Precio Especial'),
+                    ),
+                  ],
+                  onChanged: (value) async {
+                    if (value == null) return;
+
+                    setState(() {
+                      _tipoFiltro = value;
+                    });
+
+                    _aplicarFiltroActual();
+                  },
+                ),
+                const SizedBox(height: 15),
+                _cargandoInicial
                     ? const Center(child: CircularProgressIndicator())
+                    : _productosFiltrados.isEmpty
+                    ? const Center(child: Text('No hay productos disponibles'))
                     : ListView.builder(
                         controller: _scrollController,
                         shrinkWrap: true,
                         physics: const BouncingScrollPhysics(),
                         itemCount:
                             _productosFiltrados.length +
-                            ((_hasMore && _searchController.text.isEmpty)
+                            ((_hayMasProductos &&
+                                    _searchController.text.isEmpty)
                                 ? 1
                                 : 0),
                         itemBuilder: (context, index) {
@@ -283,18 +347,18 @@ class _GestionProductClientState extends State<GestionProductClient> {
                               ),
                               child: Center(
                                 child: GestureDetector(
-                                  onTap: _hasMore && !_isLoadingMore
-                                      ? _loadProductos
+                                  onTap: !isLoadingMore
+                                      ? _cargarMasSegunFiltro
                                       : null,
                                   child: Column(
                                     children: [
-                                      if (_isLoadingMore)
+                                      if (isLoadingMore)
                                         const CircularProgressIndicator()
                                       else
                                         const Icon(Icons.download),
                                       const SizedBox(height: 10),
                                       Text(
-                                        _hasMore
+                                        _hayMasProductos
                                             ? 'Toca para cargar más...'
                                             : 'No hay más productos.',
                                         style: const TextStyle(fontSize: 16),
@@ -368,7 +432,6 @@ class _GestionProductClientState extends State<GestionProductClient> {
                                     ),
                                 ],
                               ),
-
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
