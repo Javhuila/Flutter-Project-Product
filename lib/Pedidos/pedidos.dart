@@ -8,6 +8,7 @@ import 'package:flutter_project_product/Layout/ini_layout.dart';
 import 'package:flutter_project_product/Pedidos/Pagos/gestion_cuotas.dart';
 import 'package:flutter_project_product/Pedidos/Pagos/gestion_fianza.dart';
 import 'package:flutter_project_product/Pedidos/Pagos/historial_pagos.dart';
+import 'package:flutter_project_product/Pedidos/Productos/search_producto_pedidos.dart';
 import 'package:flutter_project_product/Pedidos/add_pedidos.dart';
 import 'package:flutter_project_product/Pedidos/config_pago.dart';
 import 'package:flutter_project_product/Pedidos/edit_pedidos.dart';
@@ -57,21 +58,25 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
 
   late String _usuarioIdFiltrado;
 
-  List<String> _fechasUnicas = []; // Lista para almacenar las fechas únicas
-  String? _fechaSeleccionada =
-      'Todos'; // Variable para almacenar la fecha seleccionada
+  // Lista para almacenar las fechas únicas
+  List<String> _fechasUnicas = [];
+
+  // Variable para almacenar la fecha seleccionada
+  String? _fechaSeleccionada = 'Todos';
+
   Map<String, List<DocumentSnapshot>> pedidosPorFecha = {};
 
-  List<Map<String, dynamic>> _usuarios =
-      []; // Lista de usuarios (admin y asistente)
-  String? _usuarioSeleccionado = 'Todos'; // Usuario seleccionado en el Dropdown
-  // String? _entregaSeleccionada = 'Todos'; // Usuario seleccionado en el Dropdown
+  // Lista de usuarios (admin y asistente)
+  List<Map<String, dynamic>> _usuarios = [];
+
+  // Usuario seleccionado en el Dropdown
+  String? _usuarioSeleccionado = 'Todos';
 
   Timer? _debounce;
-
+  // Entrega seleccionada en el Dropdown
   String _filtroEntrega = 'Todos';
-
-  // String _formaPago = 'entrega';
+  // Forma de pago seleccionado en el Dropdown
+  String _filtroFormaPago = 'Todos';
 
   final Map<String, ValueNotifier<Map<String, dynamic>?>> _pagoNotifiers = {};
 
@@ -308,7 +313,49 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
       }).toList();
     }
 
-    // 5. Decide cuántos mostrar (paginación parcial o completa hasta límite)
+    // 5 Filtrar por forma de pago
+    if (_filtroFormaPago != 'Todos') {
+      pedidosFiltrados = pedidosFiltrados.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+
+        final pago = data['pago'] as Map<String, dynamic>?;
+
+        final formaPago = (data['forma_pago'] ?? '').toString().toLowerCase();
+
+        final entidad = (pago?['extra']?['entidad'] ?? '')
+            .toString()
+            .toLowerCase();
+
+        final filtro = _filtroFormaPago.toLowerCase();
+
+        if (filtro == 'entrega') {
+          return formaPago == 'entrega';
+        }
+
+        if (filtro == 'cuotas') {
+          return formaPago == 'cuotas';
+        }
+
+        if (filtro == 'fianza') {
+          return formaPago == 'fianza';
+        }
+
+        if (filtro == 'bancario') {
+          return formaPago == 'bancario';
+        }
+
+        if (filtro == 'nequi' ||
+            filtro == 'bancolombia' ||
+            filtro == 'davivienda' ||
+            filtro == 'otro') {
+          return formaPago == 'bancario' && entidad == filtro;
+        }
+
+        return true;
+      }).toList();
+    }
+
+    // 6. Decide cuántos mostrar (paginación parcial o completa hasta límite)
     if (_estaFiltrado) {
       // En modo filtrado, mostrar hasta _pageSize por defecto, luego poder “cargar más” si hay más
       final mostrar = pedidosFiltrados.take(_pageSize).toList();
@@ -389,6 +436,30 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
       query = query.where('entregado', isEqualTo: true);
     } else if (_filtroEntrega == 'No entregados') {
       query = query.where('entregado', isEqualTo: false);
+    }
+
+    // --- Aplicar filtro de forma de pago (si aplica) ---
+    final forma = _filtroFormaPago.toLowerCase();
+
+    if (forma == 'entrega') {
+      query = query.where('forma_pago', isEqualTo: 'entrega');
+    } else if (forma == 'cuotas') {
+      query = query.where('forma_pago', isEqualTo: 'cuotas');
+    } else if (forma == 'fianza') {
+      query = query.where('forma_pago', isEqualTo: 'fianza');
+    }
+    // Nivel bancario = Todos
+    else if (forma == 'bancario') {
+      query = query.where('forma_pago', isEqualTo: 'bancario');
+    }
+    // Subniveles bancario = Solo uno.
+    else if (forma == 'nequi' ||
+        forma == 'bancolombia' ||
+        forma == 'davivienda' ||
+        forma == 'otro') {
+      query = query
+          .where('forma_pago', isEqualTo: 'bancario')
+          .where('pago.extra.entidad', isEqualTo: forma);
     }
 
     // --- Si se pasa texto de búsqueda, Firestore no hace "contains" nativo.
@@ -477,46 +548,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     });
   }
 
-  // Future<void> _cargarPedidosPorFecha(String fechaSeleccionada) async {
-  //   // await _determinarUsuarioParaFiltrado();
-
-  //   // 1. Obtener el rango del día
-  //   final rango = _rangoDiaDesdeClave(fechaSeleccionada);
-
-  //   // 2. Construir consulta base (solo por fecha)
-  //   Query query = FirebaseFirestore.instance
-  //       .collection('pedidos')
-  //       .where(
-  //         'fecha',
-  //         isGreaterThanOrEqualTo: Timestamp.fromDate(rango['inicio']!),
-  //       )
-  //       .where('fecha', isLessThanOrEqualTo: Timestamp.fromDate(rango['fin']!));
-
-  //   // 3. Si usuario ≠ "Todos" → aplicar filtro por usuario
-  //   if (_usuarioSeleccionado != null && _usuarioSeleccionado != "Todos") {
-  //     query = query.where('adminId', isEqualTo: _usuarioSeleccionado);
-  //   }
-
-  //   // 4. Orden obligatorio por fecha antes de numero_pedido
-  //   query = query
-  //       .orderBy('fecha', descending: true)
-  //       .orderBy('numero_pedido', descending: true)
-  //       .limit(_pageSize);
-
-  //   // 5. Ejecutar consulta
-  //   final snapshot = await query.get();
-
-  //   setState(() {
-  //     _pedidosCargados = snapshot.docs;
-  //     _lastDocumentInicial = snapshot.docs.isNotEmpty
-  //         ? snapshot.docs.last
-  //         : null;
-  //     _hasMore = snapshot.docs.length == _pageSize;
-  //   });
-
-  //   _actualizarPedidosVisibles(); // Aplica búsqueda / filtros sobre esa carga
-  // }
-
   Map<String, DateTime> _rangoDiaDesdeClave(String claveFecha) {
     final ahora = DateTime.now();
     DateTime inicioDia;
@@ -585,8 +616,10 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     final bool hayUsuario =
         _usuarioSeleccionado != null && _usuarioSeleccionado != 'Todos';
     final bool hayEntrega = _filtroEntrega != 'Todos';
+    final bool hayFormaPago = _filtroFormaPago != 'Todos';
 
-    _estaFiltrado = hayBusqueda || hayFecha || hayUsuario || hayEntrega;
+    _estaFiltrado =
+        hayBusqueda || hayFecha || hayUsuario || hayEntrega || hayFormaPago;
 
     // Si NO hay filtros activos: solo mostrar los pedidos cargados inicialmente
     if (!_estaFiltrado) {
@@ -594,7 +627,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
       return;
     }
 
-    // Si hay algún filtro → cargar desde Firestore los pedidos que cumplan, paginados
+    // Si hay algún filtro -> cargar desde Firestore los pedidos que cumplan, paginados
     await _cargarPedidosFiltradosDesdeFirestore(reset: true);
   }
 
@@ -1301,6 +1334,49 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                     ],
                     decoration: const InputDecoration(labelText: 'Entrega'),
                   ),
+                  const SizedBox(height: 15),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _filtroFormaPago,
+                    onChanged: (value) async {
+                      setState(() {
+                        _filtroFormaPago = value!;
+                      });
+                      await _aplicarFiltros();
+                    },
+                    items: const [
+                      DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                      DropdownMenuItem(
+                        value: 'entrega',
+                        child: Text('Pago por entrega'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'bancario',
+                        child: Text('Bancario (todos)'),
+                      ),
+                      DropdownMenuItem(value: 'nequi', child: Text('Nequi')),
+                      DropdownMenuItem(
+                        value: 'bancolombia',
+                        child: Text('Bancolombia'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'davivienda',
+                        child: Text('Davivienda'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'otro',
+                        child: Text('Otro banco'),
+                      ),
+                      DropdownMenuItem(value: 'cuotas', child: Text('Cuotas')),
+                      DropdownMenuItem(
+                        value: 'fianza',
+                        child: Text('Fianza/Credito'),
+                      ),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Forma de pago',
+                    ),
+                  ),
                   const SizedBox(height: 30),
                 ],
               ),
@@ -1449,14 +1525,33 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.history),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const HistorialPagos()),
-          );
-        },
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: "fab1",
+            child: const Icon(Icons.content_paste_search_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SearchProductoPedidos(),
+                ),
+              );
+            },
+          ),
+          SizedBox(width: 16),
+          FloatingActionButton(
+            heroTag: "fab2",
+            child: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistorialPagos()),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -1764,9 +1859,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                                         esAdmin
                                             ? Icons.stars_rounded
                                             : Icons.stars_outlined,
-                                        // color: esAdmin
-                                        //     ? theme.primaryColor
-                                        //     : theme.colorScheme.secondary,
                                         color:
                                             PaletasDeColores.getColorIconoUsuario(
                                               esAdmin: esAdmin,
@@ -1789,7 +1881,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                   ),
                 ),
                 Positioned(
-                  bottom: -35, // ← Esto lo hace quedar pegado sin espacio
+                  bottom: -35, // Esto lo hace quedar pegado sin espacio
                   left: 0,
                   right: 0,
                   child: Center(
@@ -1945,7 +2037,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                         ),
                         DropdownMenuItem(
                           value: 'fianza',
-                          child: Text('Fianza / Fiado'),
+                          child: Text('Fianza / Credito'),
                         ),
                       ],
                       onChanged: (value) {
@@ -2220,7 +2312,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
               ),
 
               const SizedBox(height: 15),
-
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2229,9 +2320,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                   Text('Creado por: $creador'),
                 ],
               ),
-
               const SizedBox(height: 6),
-
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2243,9 +2332,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                   Text(editor != null ? 'Editado por: $editor' : 'Sin edición'),
                 ],
               ),
-
               const SizedBox(height: 6),
-
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2253,7 +2340,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                   Text('Última edición: $fechaEdicion'),
                 ],
               ),
-
               const SizedBox(height: 60),
             ],
           ),
