@@ -2,10 +2,13 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_project_product/Theme/catalogo_color.dart';
+import 'package:flutter_project_product/Theme/theme_provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class InfoCompra extends StatefulWidget {
@@ -230,7 +233,12 @@ class _InfoCompraState extends State<InfoCompra> {
   Future<File?> _generarPDF(Map<String, dynamic> data) async {
     try {
       final productos = data['productos'];
+      final tieneFlete = productos.any(
+        (p) => (p['tipo_compra'] ?? 'normal') == 'flete',
+      );
       final concurrencia = data['concurrencia'];
+      final proveedor = data['proveedor'];
+      final destinatario = data['destinatario'];
       double totalCompra = (data['total_compra'] ?? 0).toDouble();
       String fechaA;
       final fechaCom = data['fecha'];
@@ -295,19 +303,44 @@ class _InfoCompraState extends State<InfoCompra> {
                   pw.Text(
                     "Reporte de Compra",
                     style: pw.TextStyle(
-                      fontSize: 24,
+                      fontSize: 30,
                       fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Text(
+                    "Proveedor: $proveedor",
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.normal,
+                    ),
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Text(
+                    "Destinatario: $destinatario",
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.normal,
                     ),
                   ),
                   pw.SizedBox(height: 10),
                   pw.Row(
                     children: [
-                      pw.Expanded(flex: 3, child: pw.Text("Fecha: $fechaA")),
+                      pw.Expanded(
+                        flex: 3,
+                        child: pw.Text(
+                          "Fecha: $fechaA",
+                          style: pw.TextStyle(fontSize: 14),
+                        ),
+                      ),
                       pw.Expanded(
                         flex: 4,
                         child: pw.Text(
                           "Total compra: \$${totalCompra.toStringAsFixed(0)}",
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                       pw.Expanded(
@@ -315,10 +348,10 @@ class _InfoCompraState extends State<InfoCompra> {
                         child: pw.Text(
                           "Ganancia total: \$${gananciaTotalCompra.toStringAsFixed(0)}",
                           style: pw.TextStyle(
-                            fontSize: 14,
+                            fontSize: 20,
                             fontWeight: pw.FontWeight.bold,
                             color: gananciaTotalCompra >= 0
-                                ? PdfColors.green
+                                ? PdfColors.black
                                 : PdfColors.red,
                           ),
                         ),
@@ -332,16 +365,22 @@ class _InfoCompraState extends State<InfoCompra> {
                   // Generar tabla según la concurrencia
                   _tablaPDF(productos, concurrencia),
                   pw.SizedBox(height: 20),
-                  pw.Text(
-                    "Detalle de Ganancias",
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.SizedBox(height: 10),
+                  tieneFlete
+                      ? pw.Column(
+                          children: [
+                            pw.Text(
+                              "Detalle de Ganancias",
+                              style: pw.TextStyle(
+                                fontSize: 18,
+                                fontWeight: pw.FontWeight.bold,
+                              ),
+                            ),
+                            pw.SizedBox(height: 10),
 
-                  ..._detalleGananciasPDF(productos),
+                            _detalleGananciasPDF(productos),
+                          ],
+                        )
+                      : pw.Container(),
                 ],
               ),
             );
@@ -569,33 +608,33 @@ class _InfoCompraState extends State<InfoCompra> {
     }
   }
 
-  List<pw.Widget> _detalleGananciasPDF(List productos) {
-    List<pw.Widget> lista = [];
+  pw.Widget _detalleGananciasPDF(List productos) {
+    return pw.Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: productos.map((p) {
+        final tipoCompra = p['tipo_compra'] ?? 'normal';
+        final esFlete = tipoCompra == 'flete';
 
-    for (var p in productos) {
-      final tipoCompra = p['tipo_compra'] ?? 'normal';
-      final esFlete = tipoCompra == 'flete';
+        final precioCompra = (p['precio_compra'] ?? 0).toDouble();
+        final precioVenta = (p['precio_por_defecto'] ?? 0).toDouble();
 
-      final precioCompra = (p['precio_compra'] ?? 0).toDouble();
-      final precioVenta = (p['precio_por_defecto'] ?? 0).toDouble();
+        int cantidadTotal = 0;
 
-      int cantidadTotal = 0;
+        (p['cantidades'] as Map<String, dynamic>? ?? {}).forEach((key, value) {
+          cantidadTotal += (value as int);
+        });
 
-      (p['cantidades'] as Map<String, dynamic>? ?? {}).forEach((key, value) {
-        cantidadTotal += (value as int);
-      });
+        double gananciaUnitaria = 0;
+        double gananciaTotal = 0;
 
-      double gananciaUnitaria = 0;
-      double gananciaTotal = 0;
+        if (esFlete) {
+          gananciaUnitaria = precioCompra - precioVenta;
+          gananciaTotal = gananciaUnitaria * cantidadTotal;
+        }
 
-      if (esFlete) {
-        gananciaUnitaria = precioCompra - precioVenta;
-        gananciaTotal = gananciaUnitaria * cantidadTotal;
-      }
-
-      lista.add(
-        pw.Container(
-          margin: const pw.EdgeInsets.only(bottom: 10),
+        return pw.Container(
+          width: 170, // controla cuántas columnas caben
           padding: const pw.EdgeInsets.all(8),
           decoration: pw.BoxDecoration(
             border: pw.Border.all(color: PdfColors.grey),
@@ -611,6 +650,7 @@ class _InfoCompraState extends State<InfoCompra> {
                   fontSize: 14,
                 ),
               ),
+
               pw.SizedBox(height: 4),
 
               pw.Text("Tipo: ${esFlete ? "Flete" : "Normal"}"),
@@ -630,11 +670,9 @@ class _InfoCompraState extends State<InfoCompra> {
                 pw.Text("No aplica ganancia"),
             ],
           ),
-        ),
-      );
-    }
-
-    return lista;
+        );
+      }).toList(),
+    );
   }
 
   int _obtenerIndiceActual(String concurrencia, DateTime? fechaReferencia) {
@@ -834,6 +872,13 @@ class _InfoCompraState extends State<InfoCompra> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final brightness = Theme.of(context).brightness;
+    final shadowColor = PaletasDeColores.getShadowColor(
+      themeProvider.catalogo,
+      brightness,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Detalle de Compra"),
@@ -922,12 +967,10 @@ class _InfoCompraState extends State<InfoCompra> {
 
                 if (mostrarAviso && !bloqueado)
                   Card(
-                    color: Colors.orange.shade100,
+                    color: shadowColor,
+                    shadowColor: shadowColor,
                     child: ListTile(
-                      leading: const Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.orange,
-                      ),
+                      leading: Icon(Icons.warning_amber_rounded),
                       title: const Text(
                         "Período próximo a finalizar",
                         style: TextStyle(fontWeight: FontWeight.bold),
