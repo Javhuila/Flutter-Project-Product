@@ -94,9 +94,11 @@ class _EditPedidosState extends State<EditPedidos> {
       final precio = producto['precio'] as num;
       final cantidad = int.tryParse(_cantidadController.text) ?? 0;
       final total = precio * cantidad;
+      final id = producto['id'];
 
       setState(() {
         _productosAgregados.add({
+          'id': id,
           'nombre': producto['nombre'],
           'precio': precio,
           'cantidad': cantidad,
