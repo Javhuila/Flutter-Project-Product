@@ -2,9 +2,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_project_product/Productos/edit_productos.dart';
 import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
 import 'package:intl/intl.dart';
+
+import '../Utils/Constans/app_constants.dart';
 
 class InfoProductos extends StatefulWidget {
   final DocumentSnapshot producto;
@@ -70,8 +73,14 @@ class _InfoProductosState extends State<InfoProductos> {
 
       if (snapshot.docs.isNotEmpty) {
         final catData = snapshot.docs.first.data();
+        final imagen = catData['imagen'];
+
+        // Validamos que realmente exista una URL
+        final String? imagenValida =
+            imagen is String && imagen.trim().isNotEmpty ? imagen.trim() : null;
+
         setState(() {
-          _categoriaImagen = catData['imagen'];
+          _categoriaImagen = imagenValida;
           _isLoadingCategoria = false;
         });
       } else {
@@ -95,6 +104,7 @@ class _InfoProductosState extends State<InfoProductos> {
     final nombre = data['nombre'] ?? '';
     final contenido = data['contenido'] ?? '';
     final precio = data['precio'] ?? 0.0;
+    final precioEmpresa = data['precio_empresa'] ?? 0.0;
     final marca = data['marca'] ?? '';
     final categoria = data['categoria'] ?? '';
     final clasificacion = data['clasificacion'] ?? '';
@@ -155,9 +165,9 @@ class _InfoProductosState extends State<InfoProductos> {
                       child: CachedNetworkImage(
                         fadeInDuration: Duration(milliseconds: 300),
                         fadeOutDuration: Duration(milliseconds: 200),
-                        memCacheHeight:
-                            (490 * dpr.toInt()), // opcional para pantallas HD
-                        maxHeightDiskCache: (490 * dpr.toInt()),
+                        memCacheHeight: (500 * dpr)
+                            .round(), // opcional para pantallas HD
+                        // maxHeightDiskCache: (490 * dpr.toInt()),
                         useOldImageOnUrlChange: true,
                         filterQuality: FilterQuality.low,
                         // imageUrl: imagenUrl,
@@ -182,11 +192,14 @@ class _InfoProductosState extends State<InfoProductos> {
                             ),
                           ),
                         ),
+                        cacheManager: CustomCacheManager4.instance,
                       ),
                     ),
 
                   // Imagen pequeña de la categoría (superpuesta)
-                  if (!_isLoadingCategoria && _categoriaImagen != null)
+                  if (!_isLoadingCategoria &&
+                      _categoriaImagen != null &&
+                      _categoriaImagen!.trim().isNotEmpty)
                     Positioned(
                       bottom: 20,
                       right: 20,
@@ -208,8 +221,19 @@ class _InfoProductosState extends State<InfoProductos> {
                             useOldImageOnUrlChange: true,
                             placeholder: (_, _) =>
                                 const CircularProgressIndicator(strokeWidth: 2),
-                            errorWidget: (context, url, error) =>
-                                const Icon(Icons.broken_image, size: 98),
+                            errorWidget: (context, url, error) {
+                              debugPrint('Error cargando imagen: $error');
+                              debugPrint('URL de imagen: $url');
+
+                              return const Center(
+                                child: Icon(
+                                  Icons.broken_image,
+                                  size: 60,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                            cacheManager: CustomCacheManager5.instance,
                           ),
                         ),
                       ),
@@ -248,7 +272,16 @@ class _InfoProductosState extends State<InfoProductos> {
                   children: [
                     _detalle("Marca", marca),
                     _detalle("Contenido", contenido),
-                    _detalle("Precio", "\$${precio.toStringAsFixed(2)}"),
+                    _detalle(
+                      "Precio",
+                      "\$${AppConstants.formatearMoneda(precio)}",
+                    ),
+                    _userRole == 'admin'
+                        ? _detalle(
+                            "Precio Empresa",
+                            "\$${AppConstants.formatearMoneda(precioEmpresa)}",
+                          )
+                        : SizedBox(height: 0, width: 0),
                     _detalle("Categoría", categoria),
                     _detalle("Clasificación", clasificacion),
                     _detalle("Última modificación", formattedDate),
@@ -280,4 +313,32 @@ class _InfoProductosState extends State<InfoProductos> {
       ),
     );
   }
+}
+
+class CustomCacheManager5 {
+  static const key = 'customCacheKey5';
+
+  static final CacheManager instance = CacheManager(
+    Config(
+      key,
+      stalePeriod: const Duration(days: 7),
+      maxNrOfCacheObjects: 100,
+      repo: JsonCacheInfoRepository(databaseName: key),
+      fileService: HttpFileService(),
+    ),
+  );
+}
+
+class CustomCacheManager4 {
+  static const key = 'customCacheKey4';
+
+  static final CacheManager instance = CacheManager(
+    Config(
+      key,
+      stalePeriod: const Duration(days: 7),
+      maxNrOfCacheObjects: 100,
+      repo: JsonCacheInfoRepository(databaseName: key),
+      fileService: HttpFileService(),
+    ),
+  );
 }
