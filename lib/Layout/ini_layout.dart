@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Clientes/clientes.dart';
 import 'package:flutter_project_product/Compras/compra_venta.dart';
-import 'package:flutter_project_product/Inventario/inventario.dart';
+import 'package:flutter_project_product/Inventario/inventarios_page.dart';
 import 'package:flutter_project_product/Layout/BottomNavigatorBar/settings_account.dart';
 import 'package:flutter_project_product/Layout/BottomNavigatorBar/dashboard.dart';
 import 'package:flutter_project_product/Pedidos/pedidos.dart';
@@ -174,7 +174,7 @@ class _IniLayoutState extends State<IniLayout> {
                       onTap: () {
                         navigator.push(
                           MaterialPageRoute(
-                            builder: (context) => const Inventario(),
+                            builder: (context) => const InventariosPage(),
                           ),
                         );
                       },
