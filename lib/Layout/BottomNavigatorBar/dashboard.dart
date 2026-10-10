@@ -76,6 +76,7 @@ class _DashboardState extends State<Dashboard> {
 
     final topProds = processor.getTopProductosVendidos(top: 5);
 
+    if (!mounted) return;
     setState(() {
       _pedidos = pedidos;
       _topProductos = topProds;
