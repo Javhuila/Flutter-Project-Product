@@ -7,18 +7,34 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Inventario/add_product_inventario.dart';
 import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
-import 'package:flutter_project_product/Layout/ini_layout.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class Inventario extends StatefulWidget {
-  const Inventario({super.key});
+  final String inventarioId;
+  final String nombreInventario;
+
+  const Inventario({
+    super.key,
+    required this.inventarioId,
+    required this.nombreInventario,
+  });
 
   @override
   State<Inventario> createState() => _InventarioState();
 }
 
 class _InventarioState extends State<Inventario> {
+  DocumentReference<Map<String, dynamic>> get _inventarioRef =>
+      FirebaseFirestore.instance
+          .collection('inventarios')
+          .doc(widget.inventarioId);
+
+  CollectionReference<Map<String, dynamic>> get _fechasRef =>
+      _inventarioRef.collection('fechas');
+
   final String fechaHoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   final TextEditingController _searchController = TextEditingController();
@@ -33,7 +49,7 @@ class _InventarioState extends State<Inventario> {
   String _textoBusqueda = '';
   Timer? _debounce;
   final Set<String> _fechasExpandidasCompletas = {};
-
+  bool _mostrarPrecioEmpresa = false;
   final Map<String, bool> _modoSeleccionPorFecha = {};
   final Map<String, Set<String>> _seleccionadosPorFecha = {};
 
@@ -58,6 +74,7 @@ class _InventarioState extends State<Inventario> {
     _precacheImagenes();
     await _aplicarPoliticaRetencionInventario();
     await _actualizarVentasYResiduos();
+    await _cargarConfiguracionInventario();
 
     if (!mounted) return;
     setState(() => _cargando = false);
@@ -103,16 +120,26 @@ class _InventarioState extends State<Inventario> {
   }
 
   Future<void> _crearInventarioDelDia() async {
-    final firestore = FirebaseFirestore.instance;
     final fechaHoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final inventarioRef = firestore.collection('inventario').doc(fechaHoy);
+    final fechaRef = _fechasRef.doc(fechaHoy);
 
-    final doc = await inventarioRef.get();
+    final doc = await fechaRef.get();
     if (!doc.exists) {
-      await inventarioRef.set({'fecha': fechaHoy}, SetOptions(merge: true));
-      debugPrint("Inventario del día $fechaHoy creado correctamente.");
+      await fechaRef.set({
+        'fecha': fechaHoy,
+        'adminId': adminId,
+        'fechaCreacion': Timestamp.now(),
+      });
+
+      debugPrint(
+        'Inventario "${widget.nombreInventario}" del día '
+        '$fechaHoy creado correctamente.',
+      );
     } else {
-      debugPrint("Inventario del día $fechaHoy ya existe.");
+      debugPrint(
+        'Inventario "${widget.nombreInventario}" del día '
+        '$fechaHoy ya existe.',
+      );
     }
   }
 
@@ -141,17 +168,35 @@ class _InventarioState extends State<Inventario> {
   Future<void> _eliminarInventariosAntiguos(int dias) async {
     final ahora = DateTime.now();
     final limite = ahora.subtract(Duration(days: dias));
+    final adminIdActual = adminId;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('inventario')
+    if (adminIdActual == null || adminIdActual.isEmpty) {
+      return;
+    }
+    final inventariosSnapshot = await FirebaseFirestore.instance
+        .collection('inventarios')
+        .where('adminId', isEqualTo: adminIdActual)
         .get();
 
-    for (var doc in snapshot.docs) {
-      final fechaDoc = _parseFecha(doc.id);
-      if (fechaDoc == null) continue;
+    for (final inventarioDoc in inventariosSnapshot.docs) {
+      final fechasSnapshot = await inventarioDoc.reference
+          .collection('fechas')
+          .get();
 
-      if (fechaDoc.isBefore(limite)) {
-        await doc.reference.delete();
+      for (final fechaDoc in fechasSnapshot.docs) {
+        final fecha = _parseFecha(fechaDoc.id);
+
+        if (fecha == null) continue;
+
+        if (fecha.isBefore(limite)) {
+          await fechaDoc.reference.delete();
+
+          debugPrint(
+            'Fecha antigua eliminada: '
+            '${fechaDoc.id} '
+            'del inventario ${inventarioDoc.id}',
+          );
+        }
       }
     }
   }
@@ -220,30 +265,135 @@ class _InventarioState extends State<Inventario> {
     }
   }
 
+  Future<void> _cargarConfiguracionInventario() async {
+    final doc = await FirebaseFirestore.instance
+        .collection('inventarios')
+        .doc(widget.inventarioId)
+        .get();
+
+    if (!doc.exists) return;
+
+    final data = doc.data();
+
+    if (!mounted) return;
+
+    setState(() {
+      _mostrarPrecioEmpresa = data?['mostrarPrecioEmpresa'] == true;
+    });
+  }
+
+  Future<void> _actualizarMostrarPrecioEmpresa(bool valor) async {
+    setState(() {
+      _mostrarPrecioEmpresa = valor;
+    });
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('inventarios')
+          .doc(widget.inventarioId)
+          .update({'mostrarPrecioEmpresa': valor});
+    } catch (e) {
+      debugPrint('Error al actualizar mostrarPrecioEmpresa: $e');
+
+      if (!mounted) return;
+
+      // Si falla la actualización en Firestore,
+      // restauramos el valor anterior.
+      setState(() {
+        _mostrarPrecioEmpresa = !valor;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo actualizar la configuración del inventario.',
+          ),
+        ),
+      );
+    }
+  }
+
   /// Actualiza automáticamente los campos "venta" y "residuo"
   Future<void> _actualizarVentasYResiduos() async {
-    final ventas = await _obtenerVentasAgrupadas();
+    final firestore = FirebaseFirestore.instance;
 
-    final inventarioRef = FirebaseFirestore.instance
-        .collection('inventario')
-        .doc(fechaHoy)
-        .collection('productos');
+    final inventarioRef = _fechasRef.doc(fechaHoy).collection('productos');
 
-    final snapshot = await inventarioRef.get();
+    // Obtenemos las ventas y los productos en paralelo.
+    final ventasFuture = _obtenerVentasAgrupadas();
+    final productosFuture = inventarioRef.get();
 
-    for (var prod in snapshot.docs) {
-      final data = prod.data();
-      final cantidad = (data['cantidad'] ?? 0) as int;
-      final nombre = data['nombre'] ?? '';
+    final resultados = await Future.wait([ventasFuture, productosFuture]);
+
+    final ventas = resultados[0] as Map<String, int>;
+    final snapshot = resultados[1] as QuerySnapshot<Map<String, dynamic>>;
+
+    if (snapshot.docs.isEmpty) return;
+
+    // Preparamos únicamente los documentos que necesitan cambios.
+    final productosPorActualizar =
+        <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+    final valoresActualizados = <String, Map<String, int>>{};
+
+    for (final producto in snapshot.docs) {
+      final data = producto.data();
+
+      final cantidad = (data['cantidad'] as num?)?.toInt() ?? 0;
+      final nombre = data['nombre']?.toString() ?? '';
 
       final venta = ventas[nombre] ?? 0;
-      final residuo = cantidad - venta;
 
-      await prod.reference.update({
-        'venta': venta,
-        'residuo': residuo < 0 ? 0 : residuo,
-      });
+      final residuoCalculado = cantidad - venta;
+      final residuo = residuoCalculado < 0 ? 0 : residuoCalculado;
+
+      // Comprobamos si los valores guardados ya son correctos.
+      final ventaActual = (data['venta'] as num?)?.toInt();
+      final residuoActual = (data['residuo'] as num?)?.toInt();
+
+      // Si no hay cambios, evitamos una escritura innecesaria.
+      if (ventaActual == venta && residuoActual == residuo) {
+        continue;
+      }
+
+      productosPorActualizar.add(producto);
+
+      valoresActualizados[producto.id] = {'venta': venta, 'residuo': residuo};
     }
+
+    // Si todos los documentos están actualizados, terminamos.
+    if (productosPorActualizar.isEmpty) return;
+
+    // Firestore permite hasta 500 operaciones de escritura
+    // por lote. Procesamos los productos en grupos de 500.
+    const limitePorLote = 500;
+
+    for (
+      var inicio = 0;
+      inicio < productosPorActualizar.length;
+      inicio += limitePorLote
+    ) {
+      final fin = (inicio + limitePorLote).clamp(
+        0,
+        productosPorActualizar.length,
+      );
+
+      final batch = firestore.batch();
+
+      for (var i = inicio; i < fin; i++) {
+        final producto = productosPorActualizar[i];
+        final valores = valoresActualizados[producto.id]!;
+
+        batch.update(producto.reference, valores);
+      }
+
+      await batch.commit();
+    }
+
+    debugPrint(
+      'Inventario actualizado: '
+      '${productosPorActualizar.length} productos modificados.',
+    );
   }
 
   Future<void> _editarCantidad(
@@ -291,7 +441,7 @@ class _InventarioState extends State<Inventario> {
     final firestore = FirebaseFirestore.instance;
 
     final fecha = fechaSeleccionada ?? fechaHoy;
-
+    final mostrarPrecioEmpresa = _mostrarPrecioEmpresa;
     // Parseamos la fecha a DateTime para armar el rango del día
     final fechaBase = DateTime.tryParse(fecha);
     if (fechaBase == null) return;
@@ -300,60 +450,401 @@ class _InventarioState extends State<Inventario> {
       fechaBase.year,
       fechaBase.month,
       fechaBase.day,
-      0,
-      0,
-      0,
     );
-    final finDelDia = DateTime(
+    final inicioDelDiaSiguiente = DateTime(
+      fechaBase.year,
+      fechaBase.month,
+      fechaBase.day + 1,
+    );
+
+    try {
+      // Consultamos todos los pedidos del día seleccionado.
+      final pedidosSnapshot = await firestore
+          .collection('pedidos')
+          .where('fecha', isGreaterThanOrEqualTo: inicioDelDia)
+          .where('fecha', isLessThan: inicioDelDiaSiguiente)
+          .get();
+
+      double total = 0;
+      double totalPE = 0;
+      int cantidadTotal = 0;
+
+      // Acumulamos las cantidades vendidas por ID de producto.
+      // Así evitamos consultar varias veces el mismo documento.
+      final cantidadesPorProductoId = <String, int>{};
+
+      for (final pedido in pedidosSnapshot.docs) {
+        final productosPedido = pedido.data()['productos'];
+
+        if (productosPedido is! List) continue;
+
+        for (final elemento in productosPedido) {
+          if (elemento is! Map) continue;
+
+          final producto = Map<String, dynamic>.from(elemento);
+
+          if (producto['nombre'] != nombreProducto) {
+            continue;
+          }
+
+          final precio = (producto['precio'] as num?)?.toDouble() ?? 0.0;
+
+          final cantidad = (producto['cantidad'] as num?)?.toInt() ?? 0;
+
+          total += precio * cantidad;
+          cantidadTotal += cantidad;
+
+          // Solo necesitamos los documentos de productos cuando
+          // está activado el cálculo del precio de empresa.
+          if (!mostrarPrecioEmpresa) continue;
+
+          final productoId = producto['id']?.toString();
+
+          if (productoId == null || productoId.isEmpty) {
+            continue;
+          }
+
+          cantidadesPorProductoId.update(
+            productoId,
+            (cantidadAnterior) => cantidadAnterior + cantidad,
+            ifAbsent: () => cantidad,
+          );
+        }
+      }
+
+      if (mostrarPrecioEmpresa && cantidadesPorProductoId.isNotEmpty) {
+        // Consultamos en paralelo cada ID único de producto.
+        final productosSnapshots = await Future.wait(
+          cantidadesPorProductoId.keys.map(
+            (productoId) =>
+                firestore.collection('productos').doc(productoId).get(),
+          ),
+        );
+
+        // Guardamos los precios obtenidos para reutilizarlos
+        // durante el cálculo, sin volver a leer los documentos.
+        final preciosEmpresa = <String, double>{};
+
+        for (final productoSnapshot in productosSnapshots) {
+          if (!productoSnapshot.exists) continue;
+
+          final data = productoSnapshot.data();
+          if (data == null) continue;
+
+          final precioEmpresa =
+              (data['precio_empresa'] as num?)?.toDouble() ?? 0.0;
+
+          preciosEmpresa[productoSnapshot.id] = precioEmpresa;
+        }
+
+        for (final entrada in cantidadesPorProductoId.entries) {
+          final precioEmpresa = preciosEmpresa[entrada.key];
+
+          if (precioEmpresa == null) continue;
+
+          totalPE += precioEmpresa * entrada.value;
+        }
+      }
+
+      if (!mounted) return;
+
+      final texto = StringBuffer();
+
+      if (mostrarPrecioEmpresa) {
+        texto.writeln(
+          'Cantidad total vendida de la empresa: '
+          '\$${AppConstants.formatearMoneda(totalPE)}',
+        );
+      }
+
+      texto.writeln('Cantidad total vendida: $cantidadTotal');
+
+      texto.writeln('Suma total: \$${AppConstants.formatearMoneda(total)}');
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('Total vendido de $nombreProducto'),
+          content: Text(texto.toString(), style: const TextStyle(fontSize: 18)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+    } catch (e, stackTrace) {
+      debugPrint('Error al calcular las ventas de $nombreProducto: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudieron calcular las ventas del producto.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _mostrarResumenFecha(String fecha) async {
+    final firestore = FirebaseFirestore.instance;
+
+    final fechaBase = DateTime.tryParse(fecha);
+    if (fechaBase == null) return;
+
+    final mostrarPrecioEmpresa = _mostrarPrecioEmpresa;
+
+    final inicioDelDia = DateTime(
       fechaBase.year,
       fechaBase.month,
       fechaBase.day,
-      23,
-      59,
-      59,
     );
 
-    final pedidosSnapshot = await firestore
-        .collection('pedidos')
-        .where('fecha', isGreaterThanOrEqualTo: inicioDelDia)
-        .where('fecha', isLessThanOrEqualTo: finDelDia)
-        .get();
+    final inicioDelDiaSiguiente = DateTime(
+      fechaBase.year,
+      fechaBase.month,
+      fechaBase.day + 1,
+    );
 
-    double total = 0;
-    int cantidadTotal = 0;
+    try {
+      // Iniciamos ambas consultas al mismo tiempo.
+      final productosInventarioFuture = _fechasRef
+          .doc(fecha)
+          .collection('productos')
+          .get();
 
-    for (var pedido in pedidosSnapshot.docs) {
-      final productos = List<Map<String, dynamic>>.from(pedido['productos']);
+      final pedidosFuture = firestore
+          .collection('pedidos')
+          .where('fecha', isGreaterThanOrEqualTo: inicioDelDia)
+          .where('fecha', isLessThan: inicioDelDiaSiguiente)
+          .get();
 
-      for (var p in productos) {
-        if (p['nombre'] == nombreProducto) {
-          final precio = (p['precio'] ?? 0).toDouble();
-          final cantidad = (p['cantidad'] ?? 0) as int;
-          total += precio * cantidad;
-          cantidadTotal += cantidad;
+      // Esperamos a que ambas consultas terminen.
+      final resultados = await Future.wait([
+        productosInventarioFuture,
+        pedidosFuture,
+      ]);
+
+      final productosSnapshot = resultados[0];
+
+      final pedidosSnapshot = resultados[1];
+
+      final productosInventario = productosSnapshot.docs;
+
+      // Nombres de los productos pertenecientes al inventario
+      // y a la fecha seleccionada.
+      final nombresProductos = <String>{};
+
+      for (final producto in productosInventario) {
+        final nombre = producto.data()['nombre']?.toString();
+
+        if (nombre != null && nombre.isNotEmpty) {
+          nombresProductos.add(nombre);
         }
       }
+
+      double totalVenta = 0;
+
+      // Acumulamos las cantidades por ID de producto.
+      // Esto permite consultar cada documento una sola vez,
+      // aunque el producto aparezca en varios pedidos.
+      final cantidadesPorProductoId = <String, int>{};
+
+      for (final pedido in pedidosSnapshot.docs) {
+        final productosPedido = pedido.data()['productos'];
+
+        if (productosPedido is! List) continue;
+
+        for (final elemento in productosPedido) {
+          if (elemento is! Map) continue;
+
+          final producto = Map<String, dynamic>.from(elemento);
+
+          final nombre = producto['nombre']?.toString();
+
+          // Solo contamos productos que pertenecen al inventario
+          // de la fecha seleccionada.
+          if (nombre == null || !nombresProductos.contains(nombre)) {
+            continue;
+          }
+
+          final precio = (producto['precio'] as num?)?.toDouble() ?? 0.0;
+
+          final cantidad = (producto['cantidad'] as num?)?.toInt() ?? 0;
+
+          totalVenta += precio * cantidad;
+
+          // Si el cálculo del precio de empresa está desactivado,
+          // no necesitamos consultar los documentos de productos.
+          if (!mostrarPrecioEmpresa) continue;
+
+          final productoId = producto['id']?.toString();
+
+          if (productoId == null || productoId.isEmpty) {
+            continue;
+          }
+
+          cantidadesPorProductoId.update(
+            productoId,
+            (cantidadAnterior) => cantidadAnterior + cantidad,
+            ifAbsent: () => cantidad,
+          );
+        }
+      }
+
+      double totalEmpresa = 0;
+
+      if (mostrarPrecioEmpresa && cantidadesPorProductoId.isNotEmpty) {
+        // Consultamos en paralelo cada documento único de producto.
+        final productosEmpresaSnapshots = await Future.wait(
+          cantidadesPorProductoId.keys.map(
+            (productoId) =>
+                firestore.collection('productos').doc(productoId).get(),
+          ),
+        );
+
+        // Reutilizamos los resultados obtenidos para calcular
+        // el total de empresa sin volver a consultar documentos.
+        final preciosEmpresa = <String, double>{};
+
+        for (final productoSnapshot in productosEmpresaSnapshots) {
+          if (!productoSnapshot.exists) continue;
+
+          final data = productoSnapshot.data();
+          if (data == null) continue;
+
+          final precioEmpresa =
+              (data['precio_empresa'] as num?)?.toDouble() ?? 0.0;
+
+          preciosEmpresa[productoSnapshot.id] = precioEmpresa;
+        }
+
+        for (final entrada in cantidadesPorProductoId.entries) {
+          final precioEmpresa = preciosEmpresa[entrada.key];
+
+          if (precioEmpresa == null) continue;
+
+          totalEmpresa += precioEmpresa * entrada.value;
+        }
+      }
+
+      if (!mounted) return;
+
+      final fechaFormateada = DateFormat('dd/MM/yyyy').format(fechaBase);
+
+      final texto = StringBuffer();
+
+      texto.writeln('Fecha: $fechaFormateada');
+      texto.writeln('Cantidad de productos: ${productosInventario.length}');
+      texto.writeln();
+
+      texto.writeln(
+        'Suma total de venta: '
+        '\$${AppConstants.formatearMoneda(totalVenta)}',
+      );
+
+      if (mostrarPrecioEmpresa) {
+        texto.writeln(
+          'Suma total de empresa: '
+          '\$${AppConstants.formatearMoneda(totalEmpresa)}',
+        );
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Resumen'),
+          content: Text(texto.toString(), style: const TextStyle(fontSize: 18)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+    } catch (e, stackTrace) {
+      debugPrint('Error al mostrar el resumen de fecha: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo cargar el resumen de la fecha seleccionada.',
+          ),
+        ),
+      );
     }
+  }
+
+  Future<void> _seleccionarFechaResumen() async {
+    final snapshot = await _fechasRef
+        .orderBy(FieldPath.documentId, descending: true)
+        .get();
 
     if (!mounted) return;
 
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text("Total vendido de $nombreProducto"),
-        content: Text(
-          "Cantidad total vendida: $cantidadTotal\n"
-          "Suma total: \$${total.toStringAsFixed(2)}",
-          style: const TextStyle(fontSize: 18),
+    final fechas = snapshot.docs.map((doc) => doc.id).toList();
+
+    if (fechas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay fechas de inventario disponibles.'),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cerrar"),
+      );
+      return;
+    }
+
+    final fechaSeleccionada = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Seleccionar fecha'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: fechas.length,
+              itemBuilder: (context, index) {
+                final fecha = fechas[index];
+                final fechaDateTime = DateTime.tryParse(fecha);
+
+                final fechaTexto = fechaDateTime != null
+                    ? DateFormat('dd/MM/yyyy').format(fechaDateTime)
+                    : fecha;
+
+                return ListTile(
+                  leading: Icon(
+                    fecha == fechaHoy
+                        ? Icons.calendar_today
+                        : Icons.calendar_month,
+                  ),
+                  title: Text(fechaTexto),
+                  subtitle: fecha == fechaHoy ? const Text('Hoy') : null,
+                  onTap: () {
+                    Navigator.pop(dialogContext, fecha);
+                  },
+                );
+              },
+            ),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
     );
+
+    if (fechaSeleccionada == null || !mounted) return;
+
+    await _mostrarResumenFecha(fechaSeleccionada);
   }
 
   Future<void> _eliminarSeleccionados(
@@ -428,8 +919,7 @@ class _InventarioState extends State<Inventario> {
   }
 
   Future<void> _precacheImagenes() async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('inventario')
+    final snapshot = await _fechasRef
         .orderBy(FieldPath.documentId, descending: true)
         .limit(7)
         .get();
@@ -495,15 +985,11 @@ class _InventarioState extends State<Inventario> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Inventario"),
+        title: Text(widget.nombreInventario),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) => const IniLayout()),
-              (route) => false,
-            );
+            Navigator.pop(context);
           },
         ),
         actions: _userRole == 'admin'
@@ -515,7 +1001,10 @@ class _InventarioState extends State<Inventario> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const AddProductInventario(),
+                        builder: (context) => AddProductInventario(
+                          inventarioId: widget.inventarioId,
+                          nombreInventario: widget.nombreInventario,
+                        ),
                       ),
                     );
                     setState(() {});
@@ -542,6 +1031,18 @@ class _InventarioState extends State<Inventario> {
                           icon: Icon(Icons.settings),
                         ),
                       ],
+                    ),
+                    SizedBox(height: 20),
+                    SwitchListTile(
+                      title: const Text('Mostrar precio empresa'),
+                      value: _mostrarPrecioEmpresa,
+                      onChanged: _actualizarMostrarPrecioEmpresa,
+                    ),
+                    const SizedBox(height: 20),
+                    TextButton.icon(
+                      onPressed: _seleccionarFechaResumen,
+                      icon: const Icon(Icons.summarize_outlined),
+                      label: const Text('Resumen de ventas por fecha'),
                     ),
                   ],
                 ),
@@ -612,14 +1113,22 @@ class _InventarioState extends State<Inventario> {
                 ),
               ),
               const SizedBox(height: 20),
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('inventario')
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _fechasRef
                     .orderBy(FieldPath.documentId, descending: true)
                     .limit(7) // muestra solo los últimos 7 días
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error al cargar inventarios:\n${snapshot.error}',
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
@@ -636,7 +1145,7 @@ class _InventarioState extends State<Inventario> {
                           inventarioDoc.id; // nombre del documento = fecha
                       final bool abierto = fecha == hoy;
 
-                      return StreamBuilder<QuerySnapshot>(
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                         stream: inventarioDoc.reference
                             .collection('productos')
                             .snapshots(),
@@ -677,7 +1186,9 @@ class _InventarioState extends State<Inventario> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: ExpansionTile(
-                              key: PageStorageKey(fecha),
+                              key: PageStorageKey(
+                                '${widget.inventarioId}_$fecha',
+                              ),
                               initiallyExpanded: abierto,
                               leading: Icon(
                                 _esHoy(fecha)
@@ -1049,7 +1560,7 @@ class _InventarioState extends State<Inventario> {
 }
 
 class CustomCacheManagerInv {
-  static const key = 'customCacheKey';
+  static const key = 'customCacheKey8';
 
   static final CacheManager instance = CacheManager(
     Config(
