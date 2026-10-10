@@ -12,6 +12,7 @@ import 'package:flutter_project_product/Productos/add_productos.dart';
 import 'package:flutter_project_product/Productos/edit_productos.dart';
 import 'package:flutter_project_product/Productos/info_productos.dart';
 import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
+import 'package:flutter_project_product/Utils/Constans/app_constants.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -247,13 +248,13 @@ class _ProductosState extends State<Productos> {
           .limit(500)
           .get();
 
-      final normalizedQuery = _normalizeText(query);
+      final normalizedQuery = AppConstants.normalizeText(query);
       final List<QueryDocumentSnapshot> resultados = [];
 
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
-        final nombre = _normalizeText(data['nombre'] ?? '');
-        final marca = _normalizeText(data['marca'] ?? '');
+        final nombre = AppConstants.normalizeText(data['nombre'] ?? '');
+        final marca = AppConstants.normalizeText(data['marca'] ?? '');
 
         if (nombre.contains(normalizedQuery) ||
             marca.contains(normalizedQuery)) {
@@ -299,20 +300,6 @@ class _ProductosState extends State<Productos> {
     setState(() {
       _isLoadingMore = false;
     });
-  }
-
-  /// Normaliza texto eliminando acentos y mayúsculas.
-  /// Ejemplo: "Café Molido" -> "cafe molido"
-  String _normalizeText(String text) {
-    const withAccents = 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑ';
-    const withoutAccents = 'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUN';
-
-    String result = text;
-    for (int i = 0; i < withAccents.length; i++) {
-      result = result.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-
-    return result.toLowerCase().trim();
   }
 
   Future<void> _eliminarProducto(String docId) async {
@@ -382,7 +369,7 @@ class _ProductosState extends State<Productos> {
       final nombre = data['nombre'] ?? 'Sin nombre';
       final marca = data['marca'] ?? 'Sin marca';
       final precio = data['precio'] != null
-          ? '\$${(data['precio'] as num).toStringAsFixed(2)}'
+          ? '\$${AppConstants.formatearMoneda(data['precio'])}'
           : 'Sin precio';
       final clasificacion = data['clasificacion'] ?? 'N/A';
       final imageUrl = data['imagen'] ?? '';
@@ -868,7 +855,7 @@ class _ProductosState extends State<Productos> {
                                 title: Text(data['nombre'] ?? 'Sin nombre'),
                                 subtitle: Text(
                                   data['precio'] is num
-                                      ? '\$${(data['precio'] as num).toStringAsFixed(2)}'
+                                      ? '\$${AppConstants.formatearMoneda(data['precio'])}'
                                       : 'Sin precio',
                                 ),
                                 trailing: _userRole == 'admin'
