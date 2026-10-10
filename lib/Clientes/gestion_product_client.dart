@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
+import 'package:flutter_project_product/Utils/Constans/app_constants.dart';
 
 class GestionProductClient extends StatefulWidget {
   final String clienteId;
@@ -76,19 +77,6 @@ class _GestionProductClientState extends State<GestionProductClient> {
     });
   }
 
-  String _normalizeText(String text) {
-    const withAccents = 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑ';
-    const withoutAccents = 'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUN';
-
-    String result = text;
-
-    for (int i = 0; i < withAccents.length; i++) {
-      result = result.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-
-    return result.toLowerCase().trim();
-  }
-
   Future<void> _cargarTodosLosProductos() async {
     if (_todosLosProductos.isNotEmpty) return;
 
@@ -136,7 +124,7 @@ class _GestionProductClientState extends State<GestionProductClient> {
   }
 
   Future<void> _buscarProductos(String query) async {
-    final normalizedQuery = _normalizeText(query);
+    final normalizedQuery = AppConstants.normalizeText(query);
 
     // Si la búsqueda está vacía, mostramos la lista paginada normal
     if (normalizedQuery.isEmpty) {
@@ -148,7 +136,7 @@ class _GestionProductClientState extends State<GestionProductClient> {
     final resultados = _todosLosProductos.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
 
-      final nombre = _normalizeText(data['nombre'] ?? '');
+      final nombre = AppConstants.normalizeText(data['nombre'] ?? '');
 
       return nombre.contains(normalizedQuery);
     }).toList();
@@ -436,7 +424,7 @@ class _GestionProductClientState extends State<GestionProductClient> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "Precio base: \$${precioBase.toStringAsFixed(2)}",
+                                    "Precio base: \$${AppConstants.formatearMoneda(precioBase)}",
                                   ),
                                   const SizedBox(height: 5),
                                   Row(
@@ -453,7 +441,7 @@ class _GestionProductClientState extends State<GestionProductClient> {
                                             const Text("Precio especial: "),
                                             Text(
                                               precioEspecial != null
-                                                  ? "\$${precioEspecial.toStringAsFixed(2)}"
+                                                  ? "\$${AppConstants.formatearMoneda(precioEspecial)}"
                                                   : "---",
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.bold,
@@ -490,7 +478,7 @@ class _GestionProductClientState extends State<GestionProductClient> {
 }
 
 class CustomCacheManagerGPC {
-  static const key = 'customCacheKey';
+  static const key = 'customCacheKey7';
 
   static final CacheManager instance = CacheManager(
     Config(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Compras/add_compra.dart';
 import 'package:flutter_project_product/Compras/info_compra.dart';
 import 'package:flutter_project_product/Layout/ini_layout.dart';
+import 'package:flutter_project_product/Utils/Constans/app_constants.dart';
 
 class CompraVenta extends StatefulWidget {
   const CompraVenta({super.key});
@@ -230,7 +231,7 @@ class _CompraVentaState extends State<CompraVenta> {
                       children: [
                         Text("Cantidad: ${cantidades[tipo]}"),
                         Text(
-                          "Ganancia: \$${ganancias[tipo]!.toStringAsFixed(0)}",
+                          "Ganancia: \$${AppConstants.formatearMoneda(ganancias[tipo]!)}",
                           style: TextStyle(
                             color: ganancias[tipo]! >= 0
                                 ? Colors.green
@@ -240,21 +241,23 @@ class _CompraVentaState extends State<CompraVenta> {
                         ),
                       ],
                     ),
-                    trailing: Text("\$${totales[tipo]!.toStringAsFixed(0)}"),
+                    trailing: Text(
+                      "\$${AppConstants.formatearMoneda(totales[tipo]!)}",
+                    ),
                   );
                 }),
                 const Divider(),
                 ListTile(
                   title: const Text("TOTAL GENERAL"),
                   subtitle: Text(
-                    "Ganancia total: \$${gananciaGeneral.toStringAsFixed(0)}",
+                    "Ganancia total: \$${AppConstants.formatearMoneda(gananciaGeneral)}",
                     style: TextStyle(
                       color: gananciaGeneral >= 0 ? Colors.green : Colors.red,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   trailing: Text(
-                    "\$${totalGeneral.toStringAsFixed(0)}",
+                    "\$${AppConstants.formatearMoneda(totalGeneral)}",
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -559,7 +562,7 @@ class _CompraVentaState extends State<CompraVenta> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  "\$${data['total_compra'] ?? 0}",
+                                  "\$${AppConstants.formatearMoneda(data['total_compra'])}",
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),

@@ -11,6 +11,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class InfoCompra extends StatefulWidget {
   final DocumentSnapshot compra;
 
@@ -21,7 +23,7 @@ class InfoCompra extends StatefulWidget {
 }
 
 class _InfoCompraState extends State<InfoCompra> {
-  Map<String, bool> _celdasResaltadas = {};
+  Map<String, bool> celdasResaltadas = {};
 
   String _nombrePeriodo(String concurrencia, int index) {
     switch (concurrencia) {
@@ -75,13 +77,13 @@ class _InfoCompraState extends State<InfoCompra> {
     final key = "${producto['productoId']}_$indexCelda";
 
     setState(() {
-      _celdasResaltadas[key] = true;
+      celdasResaltadas[key] = true;
     });
 
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted) return;
       setState(() {
-        _celdasResaltadas[key] = false;
+        celdasResaltadas[key] = false;
       });
     });
     // final indexCelda = _obtenerIndiceActual(concurrencia);
@@ -188,18 +190,22 @@ class _InfoCompraState extends State<InfoCompra> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("Tipo: ${esFlete ? "Flete" : "Normal"}"),
-            Text("Precio compra: \$${precioCompra.toStringAsFixed(0)}"),
+            Text(
+              "Precio compra: \$${AppConstants.formatearMoneda(precioCompra)}",
+            ),
 
             if (esFlete) ...[
-              Text("Precio venta: \$${precioVenta.toStringAsFixed(0)}"),
+              Text(
+                "Precio venta: \$${AppConstants.formatearMoneda(precioVenta)}",
+              ),
               const SizedBox(height: 10),
               Text(
-                "Ganancia unitaria: \$${gananciaUnitaria.toStringAsFixed(0)}",
+                "Ganancia unitaria: \$${AppConstants.formatearMoneda(gananciaUnitaria)}",
               ),
               Text("Cantidad: $cantidadTotal"),
               const SizedBox(height: 10),
               Text(
-                "Ganancia total: \$${gananciaTotal.toStringAsFixed(0)}",
+                "Ganancia total: \$${AppConstants.formatearMoneda(gananciaTotal)}",
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ] else
@@ -336,7 +342,7 @@ class _InfoCompraState extends State<InfoCompra> {
                       pw.Expanded(
                         flex: 4,
                         child: pw.Text(
-                          "Total compra: \$${totalCompra.toStringAsFixed(0)}",
+                          "Total compra: \$${AppConstants.formatearMoneda(totalCompra)}",
                           style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold,
                             fontSize: 14,
@@ -346,7 +352,7 @@ class _InfoCompraState extends State<InfoCompra> {
                       pw.Expanded(
                         flex: 5,
                         child: pw.Text(
-                          "Ganancia total: \$${gananciaTotalCompra.toStringAsFixed(0)}",
+                          "Ganancia total: \$${AppConstants.formatearMoneda(gananciaTotalCompra)}",
                           style: pw.TextStyle(
                             fontSize: 20,
                             fontWeight: pw.FontWeight.bold,
@@ -380,7 +386,12 @@ class _InfoCompraState extends State<InfoCompra> {
                             _detalleGananciasPDF(productos),
                           ],
                         )
-                      : pw.Container(),
+                      : pw.Container(
+                          child: pw.Text(
+                            "Total compra: \$${AppConstants.formatearMoneda(totalCompra)}",
+                            style: pw.TextStyle(fontSize: 34),
+                          ),
+                        ),
                 ],
               ),
             );
@@ -410,7 +421,9 @@ class _InfoCompraState extends State<InfoCompra> {
       final formatted =
           "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}_${now.hour}_${now.minute}_${now.second}";
 
-      final file = File('${folder.path}/reporte_compra_$formatted.pdf');
+      final file = File(
+        '${folder.path}/${AppConstants.formatearMoneda(totalCompra)}_$formatted.pdf',
+      );
       await file.writeAsBytes(await pdf.save());
       return file;
     } catch (e) {
@@ -654,16 +667,20 @@ class _InfoCompraState extends State<InfoCompra> {
               pw.SizedBox(height: 4),
 
               pw.Text("Tipo: ${esFlete ? "Flete" : "Normal"}"),
-              pw.Text("Precio compra: \$${precioCompra.toStringAsFixed(0)}"),
+              pw.Text(
+                "Precio compra: \$${AppConstants.formatearMoneda(precioCompra)}",
+              ),
 
               if (esFlete) ...[
-                pw.Text("Precio venta: \$${precioVenta.toStringAsFixed(0)}"),
                 pw.Text(
-                  "Ganancia unitaria: \$${gananciaUnitaria.toStringAsFixed(0)}",
+                  "Precio venta: \$${AppConstants.formatearMoneda(precioVenta)}",
+                ),
+                pw.Text(
+                  "Ganancia unitaria: \$${AppConstants.formatearMoneda(gananciaUnitaria)}",
                 ),
                 pw.Text("Cantidad: $cantidadTotal"),
                 pw.Text(
-                  "Ganancia total: \$${gananciaTotal.toStringAsFixed(0)}",
+                  "Ganancia total: \$${AppConstants.formatearMoneda(gananciaTotal)}",
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 ),
               ] else
@@ -949,13 +966,13 @@ class _InfoCompraState extends State<InfoCompra> {
                     ),
                     subtitle: Text("Fecha: $fechaText"),
                     trailing: Text(
-                      "\$${data['total_compra'] ?? 0}",
+                      "\$${AppConstants.formatearMoneda(data['total_compra'])}",
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
                 Text(
-                  "Ganancia total: \$${gananciaTotalCompra.toStringAsFixed(0)}",
+                  "Ganancia total: \$${AppConstants.formatearMoneda(gananciaTotalCompra)}",
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -1080,14 +1097,16 @@ class _InfoCompraState extends State<InfoCompra> {
             title: Text(producto['nombre'] ?? ''),
             subtitle: Text(
               esFlete
-                  ? "Cant: $cantidad | Compra: \$${producto['precio_compra']} | Base: \$${producto['precio_por_defecto'] ?? 0}"
-                  : "Cant: $cantidad | Compra: \$${producto['precio_compra']}",
+                  ? "Cant: $cantidad | Compra: \$${AppConstants.formatearMoneda(producto['precio_compra'])} | Base: \$${AppConstants.formatearMoneda(producto['precio_por_defecto'])}"
+                  : "Cant: $cantidad | Compra: \$${AppConstants.formatearMoneda(producto['precio_compra'])}",
             ),
 
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text("\$${producto['valor_total']}"),
+                Text(
+                  "\$${AppConstants.formatearMoneda(producto['valor_total'])}",
+                ),
 
                 IconButton(
                   icon: const Icon(Icons.attach_money),
@@ -1150,7 +1169,7 @@ class _InfoCompraState extends State<InfoCompra> {
                   ...List.generate(7, (i) {
                     final cantidad = p['cantidades']?[i.toString()] ?? 0;
                     final key = "${p['productoId']}_$i";
-                    final resaltado = _celdasResaltadas[key] ?? false;
+                    final resaltado = celdasResaltadas[key] ?? false;
 
                     return DataCell(
                       _celdaConIndicador(
@@ -1224,7 +1243,7 @@ class _InfoCompraState extends State<InfoCompra> {
                   ...List.generate(totalSemanas, (i) {
                     final cantidad = p['cantidades']?[i.toString()] ?? 0;
                     final key = "${p['productoId']}_$i";
-                    final resaltado = _celdasResaltadas[key] ?? false;
+                    final resaltado = celdasResaltadas[key] ?? false;
 
                     return DataCell(
                       _celdaConIndicador(
@@ -1308,7 +1327,7 @@ class _InfoCompraState extends State<InfoCompra> {
                   ...List.generate(12, (i) {
                     final cantidad = p['cantidades']?[i.toString()] ?? 0;
                     final key = "${p['productoId']}_$i";
-                    final resaltado = _celdasResaltadas[key] ?? false;
+                    final resaltado = celdasResaltadas[key] ?? false;
 
                     return DataCell(
                       _celdaConIndicador(

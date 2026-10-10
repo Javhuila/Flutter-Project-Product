@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_project_product/Compras/widgets/precio_historial.dart';
 import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
+import 'package:flutter_project_product/Utils/Constans/app_constants.dart';
 
 class AddCompra extends StatefulWidget {
   const AddCompra({super.key});
@@ -85,19 +86,6 @@ class _AddCompraState extends State<AddCompra> {
             _productosCargados = true;
           });
         });
-  }
-
-  String _normalizeText(String text) {
-    const withAccents = 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑ';
-    const withoutAccents = 'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUN';
-
-    String result = text;
-
-    for (int i = 0; i < withAccents.length; i++) {
-      result = result.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-
-    return result.toLowerCase().trim();
   }
 
   void _onSearchChanged(String value) {
@@ -456,7 +444,11 @@ class _AddCompraState extends State<AddCompra> {
                         cells: [
                           DataCell(Text(p['nombre'])),
                           DataCell(Text(cantidadTotal.toString())),
-                          DataCell(Text("\$${p['valor_total']}")),
+                          DataCell(
+                            Text(
+                              "\$${AppConstants.formatearMoneda(p['valor_total'])}",
+                            ),
+                          ),
                           DataCell(
                             IconButton(
                               icon: Icon(Icons.delete),
@@ -502,7 +494,7 @@ class _AddCompraState extends State<AddCompra> {
                 const SizedBox(height: 20),
 
                 Text(
-                  "Total compra: \$${totalCompra.toStringAsFixed(0)}",
+                  "Total compra: \$${AppConstants.formatearMoneda(totalCompra)}",
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -536,8 +528,8 @@ class _AddCompraState extends State<AddCompra> {
         }
 
         return listaProductos.where((Map<String, dynamic> option) {
-          final input = _normalizeText(textEditingValue.text);
-          final candidate = _normalizeText(option['nombre']);
+          final input = AppConstants.normalizeText(textEditingValue.text);
+          final candidate = AppConstants.normalizeText(option['nombre']);
           return candidate.contains(input);
         });
       },
@@ -603,7 +595,7 @@ class _AddCompraState extends State<AddCompra> {
                                   ),
                               errorWidget: (context, url, error) =>
                                   const Icon(Icons.broken_image, size: 40),
-                              cacheManager: CustomCacheManagerCom.instance,
+                              cacheManager: CustomCacheManagerCom6.instance,
                             ),
                           )
                         : const Icon(Icons.image_not_supported, size: 40),
@@ -779,8 +771,8 @@ class _PrecioAutocompleteFieldState extends State<PrecioAutocompleteField> {
   }
 }
 
-class CustomCacheManagerCom {
-  static const key = 'customCacheKey';
+class CustomCacheManagerCom6 {
+  static const key = 'customCacheKey6';
 
   static final CacheManager instance = CacheManager(
     Config(

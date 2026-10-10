@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class ConfigPago extends StatefulWidget {
   final String tipoPago; // 'cuotas' | 'fianza'
   final double totalPedido;
@@ -51,7 +53,7 @@ class _ConfigPagoState extends State<ConfigPago> {
               // TOTAL
               // ------------------------
               Text(
-                'Total del pedido: \$${widget.totalPedido.toStringAsFixed(0)}',
+                'Total del pedido: \$${AppConstants.formatearMoneda(widget.totalPedido)}',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -93,7 +95,7 @@ class _ConfigPagoState extends State<ConfigPago> {
 
                 if (_cantidadCuotas > 0)
                   Text(
-                    'Valor por cuota: \$${_valorCuota.toStringAsFixed(2)}',
+                    'Valor por cuota: \$${AppConstants.formatearMoneda(_valorCuota)}',
                     style: const TextStyle(fontSize: 16),
                   ),
               ],
@@ -130,7 +132,7 @@ class _ConfigPagoState extends State<ConfigPago> {
                 const SizedBox(height: 12),
 
                 Text(
-                  'Saldo pendiente: \$${(widget.totalPedido - _aporteInicial).toStringAsFixed(0)}',
+                  'Saldo pendiente: \$${AppConstants.formatearMoneda(widget.totalPedido - _aporteInicial)}',
                   style: const TextStyle(fontSize: 16),
                 ),
               ],

@@ -8,6 +8,8 @@ import 'package:flutter_project_product/Clientes/edit_clientes.dart';
 import 'package:flutter_project_product/Clientes/gestion_product_client.dart';
 import 'package:flutter_project_product/Clientes/info_clientes.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class Clientes extends StatefulWidget {
   const Clientes({super.key});
 
@@ -69,21 +71,6 @@ class _ClientesState extends State<Clientes> with TickerProviderStateMixin {
     }
   }
 
-  /// Normaliza un texto para comparar sin acentos ni mayúsculas.
-  /// Ejemplo: "José Álvarez" -> "jose alvarez"
-  String _normalizeText(String text) {
-    const withAccents = 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑ';
-    const withoutAccents = 'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUN';
-
-    String result = text;
-
-    for (int i = 0; i < withAccents.length; i++) {
-      result = result.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-
-    return result.toLowerCase().trim();
-  }
-
   Future<void> _searchClientes(String query, {bool reset = true}) async {
     setState(() {
       if (reset) {
@@ -132,7 +119,9 @@ class _ClientesState extends State<Clientes> with TickerProviderStateMixin {
             .toString()
             .toLowerCase();
 
-        if (_normalizeText(nombreCompleto).contains(_normalizeText(query))) {
+        if (AppConstants.normalizeText(
+          nombreCompleto,
+        ).contains(AppConstants.normalizeText(query))) {
           resultados.add(doc);
         }
       }
