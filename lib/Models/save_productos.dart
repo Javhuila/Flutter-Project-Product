@@ -17,7 +17,7 @@ Future<void> saveProductos({
     'nombre': nombre,
     'contenido': contenido,
     'precio': precio,
-    'precio_empresa': precioEmpresa ?? 0.0,
+    'precio_empresa': precioEmpresa ?? 0.0, // Nuevo
     'marca': marca,
     'categoria': categoria,
     'clasificacion': clasificacion,
