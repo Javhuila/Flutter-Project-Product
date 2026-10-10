@@ -27,6 +27,7 @@ class _EditProductosState extends State<EditProductos> {
   late TextEditingController _nombreController;
   late TextEditingController _contenidoController;
   late TextEditingController _precioController;
+  late TextEditingController _precioEmpresaController;
   late TextEditingController _marcaController;
 
   Future<void> pickImage() async {
@@ -75,6 +76,7 @@ class _EditProductosState extends State<EditProductos> {
     }
 
     String? imageUrl = widget.producto['imagen'];
+    // double? precioEmp = widget.producto['precio_empresa'];
 
     if (_image != null) {
       final uploadedUrl = await imageUploadService(_image!);
@@ -95,6 +97,8 @@ class _EditProductosState extends State<EditProductos> {
           'nombre': _nombreController.text.trim(),
           'contenido': _contenidoController.text.trim(),
           'precio': double.tryParse(_precioController.text.trim()),
+          'precio_empresa':
+              double.tryParse(_precioEmpresaController.text.trim()) ?? 0.0,
           'marca': _marcaController.text.trim(),
           'categoria': _selectedCategory,
           'clasificacion': _selectedClasifica,
@@ -156,22 +160,19 @@ class _EditProductosState extends State<EditProductos> {
   @override
   void initState() {
     super.initState();
-
-    _nombreController = TextEditingController(
-      text: widget.producto['nombre'] ?? '',
-    );
-    _contenidoController = TextEditingController(
-      text: widget.producto['contenido'] ?? '',
-    );
+    final data = widget.producto.data() as Map<String, dynamic>;
+    _nombreController = TextEditingController(text: data['nombre'] ?? '');
+    _contenidoController = TextEditingController(text: data['contenido'] ?? '');
     _precioController = TextEditingController(
-      text: (widget.producto['precio'] ?? 0).toString(),
+      text: (data['precio'] ?? 0).toString(),
     );
-    _marcaController = TextEditingController(
-      text: widget.producto['marca'] ?? '',
+    _precioEmpresaController = TextEditingController(
+      text: (data['precio_empresa'] ?? 0).toString(),
     );
+    _marcaController = TextEditingController(text: data['marca'] ?? '');
 
-    _selectedCategory = widget.producto['categoria'];
-    _selectedClasifica = widget.producto['clasificacion'];
+    _selectedCategory = data['categoria'];
+    _selectedClasifica = data['clasificacion'];
 
     _loadCategoriesAndClasificaciones();
   }
@@ -181,6 +182,7 @@ class _EditProductosState extends State<EditProductos> {
     _nombreController.dispose();
     _contenidoController.dispose();
     _precioController.dispose();
+    _precioEmpresaController.dispose();
     _marcaController.dispose();
     super.dispose();
   }
@@ -289,6 +291,24 @@ class _EditProductosState extends State<EditProductos> {
                         return null;
                       },
                       decoration: InputDecoration(labelText: "Precio"),
+                    ),
+                    const SizedBox(height: 15),
+                    TextFormField(
+                      controller: _precioEmpresaController,
+                      keyboardType: TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Campo requerido';
+                        }
+                        final parsed = double.tryParse(value);
+                        if (parsed == null) {
+                          return 'Ingrese un número válido';
+                        }
+                        return null;
+                      },
+                      decoration: InputDecoration(labelText: "Precio Empresa"),
                     ),
                     const SizedBox(height: 15),
                     TextFormField(
