@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Pedidos/config_pago.dart';
 import 'package:flutter_project_product/Pedidos/pedidos.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class ProductLoad extends StatefulWidget {
   final String clienteNombre;
   final String fechaPedido;
@@ -47,6 +49,10 @@ class _ProductLoadState extends State<ProductLoad> {
   String? _entidadBancaria;
   String? _entidadBancariaOtro;
 
+  final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _observacionFocusNode = FocusNode();
+  final FocusNode _otroFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +63,9 @@ class _ProductLoadState extends State<ProductLoad> {
   void dispose() {
     _cantidadController.dispose();
     _observacionController.dispose();
+    _searchFocusNode.dispose();
+    _observacionFocusNode.dispose();
+    _otroFocusNode.dispose();
     super.dispose();
   }
 
@@ -152,38 +161,63 @@ class _ProductLoadState extends State<ProductLoad> {
 
   Future<void> _loadCategories() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    if (currentUser == null) {
+      if (!mounted) return;
 
-    // Obtener adminId
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUser.uid)
-        .get();
+      setState(() {
+        _categories = [];
+        _isLoadingCat = false;
+      });
 
-    String adminId = currentUser.uid;
-    if (userDoc.exists && userDoc.data()?['adminId'] != null) {
-      adminId = userDoc['adminId'];
+      return;
     }
+    try {
+      // Obtener adminId
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('categorias')
-        .where('adminId', isEqualTo: adminId)
-        .orderBy('nombre')
-        .get();
+      String adminId = currentUser.uid;
+      if (userDoc.exists && userDoc.data()?['adminId'] != null) {
+        adminId = userDoc['adminId'];
+      }
 
-    setState(() {
-      _categories = snapshot.docs
-          .map(
-            (d) => {
-              'id': d.id,
-              'nombre': d['nombre'],
-              'imagen': d['imagen'],
-              'docRef': d.reference,
-            },
-          )
-          .toList();
-      _isLoadingCat = false;
-    });
+      final snapshot = await FirebaseFirestore.instance
+          .collection('categorias')
+          .where('adminId', isEqualTo: adminId)
+          .orderBy('nombre')
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _categories = snapshot.docs.map((d) {
+          final data = d.data();
+
+          final imagen = data['imagen'];
+
+          final String? imagenValida =
+              imagen is String && imagen.trim().isNotEmpty
+              ? imagen.trim()
+              : null;
+
+          return {
+            'id': d.id,
+            'nombre': data['nombre'] ?? '',
+            'imagen': imagenValida,
+            'docRef': d.reference,
+          };
+        }).toList();
+
+        _isLoadingCat = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _categories = [];
+        _isLoadingCat = false;
+      });
+    }
   }
 
   Future<int> _obtenerSiguienteNumeroPedido() async {
@@ -207,6 +241,7 @@ class _ProductLoadState extends State<ProductLoad> {
   }
 
   void _agregarProducto() {
+    _searchFocusNode.unfocus();
     if (_formKeySecond.currentState!.validate() &&
         _selectedproductList != null) {
       final cantidad = int.tryParse(_cantidadController.text);
@@ -304,15 +339,11 @@ class _ProductLoadState extends State<ProductLoad> {
       return;
     }
 
-    DateTime parseFecha(String fechaStr) {
-      final partes = fechaStr.split('/');
-      final day = int.parse(partes[0]);
-      final month = int.parse(partes[1]);
-      final year = int.parse(partes[2]);
-      return DateTime(year, month, day);
-    }
-
     final numeroPedido = await _obtenerSiguienteNumeroPedido();
+
+    final productosNombres = _productosAgregados
+        .map((p) => (p['nombre'] ?? '').toString().toLowerCase())
+        .toList();
 
     // Obtener UID del usuario actual
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -390,10 +421,11 @@ class _ProductLoadState extends State<ProductLoad> {
       'numero_pedido': numeroPedido,
       'cliente': widget.clienteNombre,
       'tipo': widget.tipoCliente,
-      'fecha': parseFecha(widget.fechaPedido),
+      'fecha': AppConstants.parseFecha(widget.fechaPedido),
       'observacion': _observacionController.text.trim(),
       'productos': _productosAgregados,
       'productos_contabilizado': _productosAgregados.length,
+      'productos_nombres': productosNombres,
       'cantidad_total': _productosAgregados.fold(
         0,
         (addSum, p) => addSum + (p['cantidad'] as int),
@@ -554,30 +586,48 @@ class _ProductLoadState extends State<ProductLoad> {
                                           labelText: 'Categoría',
                                         ),
                                         items: _categories.map((category) {
+                                          final imagen = category['imagen'];
                                           return DropdownMenuItem<String>(
                                             value: category['id'],
                                             child: Row(
                                               children: [
-                                                CachedNetworkImage(
-                                                  imageUrl:
-                                                      category['imagen'] ?? '',
-                                                  width: 24,
-                                                  height: 24,
-                                                  placeholder: (context, url) =>
-                                                      const SizedBox(
-                                                        width: 24,
-                                                        height: 24,
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                              strokeWidth: 2,
-                                                            ),
-                                                      ),
-                                                  errorWidget:
-                                                      (context, url, error) =>
-                                                          const Icon(
-                                                            Icons.broken_image,
-                                                          ),
-                                                ),
+                                                if (imagen is String &&
+                                                    imagen.isNotEmpty)
+                                                  CachedNetworkImage(
+                                                    imageUrl: imagen,
+                                                    width: 24,
+                                                    height: 24,
+                                                    placeholder:
+                                                        (
+                                                          context,
+                                                          url,
+                                                        ) => const SizedBox(
+                                                          width: 24,
+                                                          height: 24,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                strokeWidth: 2,
+                                                              ),
+                                                        ),
+                                                    errorWidget:
+                                                        (
+                                                          context,
+                                                          url,
+                                                          error,
+                                                        ) => const Icon(
+                                                          Icons.broken_image,
+                                                        ),
+                                                  )
+                                                else
+                                                  const SizedBox(
+                                                    width: 24,
+                                                    height: 24,
+                                                    child: Icon(
+                                                      Icons
+                                                          .image_not_supported_outlined,
+                                                      size: 20,
+                                                    ),
+                                                  ),
                                                 const SizedBox(width: 8),
                                                 Text(category['nombre']),
                                               ],
@@ -613,29 +663,42 @@ class _ProductLoadState extends State<ProductLoad> {
                                     labelText: 'Categoría',
                                   ),
                                   items: _categories.map((category) {
+                                    final imagen = category['imagen'];
                                     return DropdownMenuItem<String>(
                                       value: category['id'],
                                       child: Row(
                                         children: [
-                                          CachedNetworkImage(
-                                            imageUrl: category['imagen'] ?? '',
-                                            width: 24,
-                                            height: 24,
-                                            placeholder: (context, url) =>
-                                                const SizedBox(
-                                                  width: 24,
-                                                  height: 24,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
+                                          if (imagen is String &&
+                                              imagen.isNotEmpty)
+                                            CachedNetworkImage(
+                                              imageUrl: imagen,
+                                              width: 24,
+                                              height: 24,
+                                              placeholder: (context, url) =>
+                                                  const SizedBox(
+                                                    width: 24,
+                                                    height: 24,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                        ),
+                                                  ),
+                                              errorWidget:
+                                                  (context, url, error) =>
+                                                      const Icon(
+                                                        Icons.broken_image,
                                                       ),
-                                                ),
-                                            errorWidget:
-                                                (context, url, error) =>
-                                                    const Icon(
-                                                      Icons.broken_image,
-                                                    ),
-                                          ),
+                                            )
+                                          else
+                                            const SizedBox(
+                                              width: 24,
+                                              height: 24,
+                                              child: Icon(
+                                                Icons
+                                                    .image_not_supported_outlined,
+                                                size: 20,
+                                              ),
+                                            ),
                                           const SizedBox(width: 8),
                                           Text(category['nombre']),
                                         ],
@@ -726,6 +789,7 @@ class _ProductLoadState extends State<ProductLoad> {
                           const SizedBox(height: 15),
                           TextFormField(
                             controller: _cantidadController,
+                            focusNode: _searchFocusNode,
                             decoration: const InputDecoration(
                               suffixIcon: Icon(Icons.onetwothree_rounded),
                               hintText: "Digita una cantidad",
@@ -768,6 +832,7 @@ class _ProductLoadState extends State<ProductLoad> {
                                     widget.tipoCliente == 'Especial'
                                         ? DataCell(
                                             TextFormField(
+                                              key: ValueKey(item),
                                               initialValue: item['precio']
                                                   .toString(),
                                               keyboardType:
@@ -814,7 +879,7 @@ class _ProductLoadState extends State<ProductLoad> {
                           Container(
                             margin: const EdgeInsets.symmetric(horizontal: 5),
                             child: Text(
-                              "El total es de: \$${_calcularTotalProducto().toStringAsFixed(2)}",
+                              "El total es de: \$${AppConstants.formatearMoneda(_calcularTotalProducto())}",
                             ),
                           ),
                         ],
@@ -823,6 +888,7 @@ class _ProductLoadState extends State<ProductLoad> {
                     const SizedBox(height: 15),
                     TextFormField(
                       controller: _observacionController,
+                      focusNode: _observacionFocusNode,
                       decoration: const InputDecoration(
                         suffixIcon: Icon(Icons.wechat_sharp),
                         hintText: "Escriba una observacion",
@@ -947,6 +1013,7 @@ class _ProductLoadState extends State<ProductLoad> {
                       ),
                       if (_entidadBancaria == 'otro')
                         TextFormField(
+                          focusNode: _otroFocusNode,
                           decoration: const InputDecoration(
                             labelText: 'Nombre de entidad',
                           ),
