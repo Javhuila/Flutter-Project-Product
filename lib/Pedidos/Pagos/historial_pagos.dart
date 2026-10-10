@@ -9,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import '../../Utils/Constans/app_constants.dart';
+
 class HistorialPagos extends StatefulWidget {
   const HistorialPagos({super.key});
 
@@ -247,9 +249,9 @@ class _HistorialPagosState extends State<HistorialPagos>
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Total: \$${data['total']}'),
-              Text('Pagado: \$${data['pagado']}'),
-              Text('Saldo: \$${data['saldo']}'),
+              Text('Total: \$${AppConstants.formatearMoneda(data['total'])}'),
+              Text('Pagado: \$${AppConstants.formatearMoneda(data['pagado'])}'),
+              Text('Saldo: \$${AppConstants.formatearMoneda(data['saldo'])}'),
               SizedBox(height: 8),
               Text("Fecha: $_fechaDeuda"),
             ],
@@ -321,15 +323,15 @@ class _HistorialPagosState extends State<HistorialPagos>
 
               pw.SizedBox(height: 15),
               pw.Text(
-                'Total: \$${data['total'].toInt()}',
+                'Total: \$${AppConstants.formatearMoneda(data['total'].toInt())}',
                 style: pw.TextStyle(fontSize: 20),
               ),
               pw.Text(
-                'Pagado: \$${data['pagado'].toInt()}',
+                'Pagado: \$${AppConstants.formatearMoneda(data['pagado'].toInt())}',
                 style: pw.TextStyle(fontSize: 20),
               ),
               pw.Text(
-                'Saldo: \$${data['saldo'].toInt()}',
+                'Saldo: \$${AppConstants.formatearMoneda(data['saldo'].toInt())}',
                 style: pw.TextStyle(fontSize: 20),
               ),
               pw.Divider(),
@@ -371,7 +373,7 @@ class _HistorialPagosState extends State<HistorialPagos>
 
     final directory = await getTemporaryDirectory();
 
-    final file = File('${directory.path}/historial_pago.pdf');
+    final file = File('${directory.path}/historial_pago_$nombre.pdf');
 
     await file.writeAsBytes(await pdf.save());
 
@@ -556,13 +558,13 @@ class _HistorialPagosState extends State<HistorialPagos>
 
                           title: Text('Cuota #$numero'),
 
-                          subtitle: Text(_formatearFecha(fecha)),
+                          subtitle: Text(AppConstants.formatFecha(fecha)),
 
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '\$${monto.toInt()}',
+                                '\$${AppConstants.formatearMoneda(monto.toInt())}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -592,13 +594,13 @@ class _HistorialPagosState extends State<HistorialPagos>
 
                         title: const Text('Aporte'),
 
-                        subtitle: Text(_formatearFecha(fecha)),
+                        subtitle: Text(AppConstants.formatFecha(fecha)),
 
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '\$${monto.toInt()}',
+                              '\$${AppConstants.formatearMoneda(monto.toInt())}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -630,10 +632,6 @@ class _HistorialPagosState extends State<HistorialPagos>
     );
   }
 
-  String _formatearFecha(DateTime fecha) {
-    return '${fecha.day}/${fecha.month}/${fecha.year}';
-  }
-
   Widget _buildResumen({
     required String tipo,
     required double total,
@@ -645,9 +643,9 @@ class _HistorialPagosState extends State<HistorialPagos>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Total: \$${total.toInt()}'),
-        Text('Pagado: \$${pagado.toInt()}'),
-        Text('Saldo: \$${saldo.toInt()}'),
+        Text('Total: \$${AppConstants.formatearMoneda(total.toInt())}'),
+        Text('Pagado: \$${AppConstants.formatearMoneda(pagado.toInt())}'),
+        Text('Saldo: \$${AppConstants.formatearMoneda(saldo.toInt())}'),
 
         if (tipo == 'cuotas') ...[
           const SizedBox(height: 6),
