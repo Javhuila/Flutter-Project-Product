@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../Utils/Constans/app_constants.dart';
+
 class GestionCuotas extends StatefulWidget {
   final String pedidoId;
   final String deudaId;
@@ -145,13 +147,15 @@ class _GestionCuotasState extends State<GestionCuotas> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Total: \$${total.toInt()}'),
-            Text('Pagado: \$${pagado.toInt()}'),
-            Text('Saldo: \$${saldo.toInt()}'),
+            Text('Total: \$${AppConstants.formatearMoneda(total.toInt())}'),
+            Text('Pagado: \$${AppConstants.formatearMoneda(pagado.toInt())}'),
+            Text('Saldo: \$${AppConstants.formatearMoneda(saldo.toInt())}'),
             const SizedBox(height: 10),
 
             Text('Cuotas: $cuotasPagadas / $cuotasTotal'),
-            Text('Valor cuota: \$${valorCuota.toInt()}'),
+            Text(
+              'Valor cuota: \$${AppConstants.formatearMoneda(valorCuota.toInt())}',
+            ),
 
             const Divider(height: 30),
 

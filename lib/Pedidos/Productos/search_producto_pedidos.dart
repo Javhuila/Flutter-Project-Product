@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Pedidos/info_pedido.dart';
 
+import '../../Utils/Constans/app_constants.dart';
+
 class SearchProductoPedidos extends StatefulWidget {
   const SearchProductoPedidos({super.key});
 
@@ -301,11 +303,11 @@ class _SearchProductoPedidosState extends State<SearchProductoPedidos> {
                                               ),
 
                                               Text(
-                                                "Valor unidad: \$${producto['precio']}",
+                                                "Valor unidad: \$${AppConstants.formatearMoneda(producto['precio'])}",
                                               ),
 
                                               Text(
-                                                "Total: \$${producto['total']}",
+                                                "Total: \$${AppConstants.formatearMoneda(producto['total'])}",
                                               ),
 
                                               const Divider(),

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../Utils/Constans/app_constants.dart';
+
 class GestionFianza extends StatefulWidget {
   final String pedidoId;
   final String deudaId;
@@ -138,7 +140,7 @@ class _GestionFianzaState extends State<GestionFianza> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${pagado.toInt()} de ${total.toInt()}',
+                '${AppConstants.formatearMoneda(pagado.toInt())} de ${AppConstants.formatearMoneda(total.toInt())}',
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -146,7 +148,7 @@ class _GestionFianzaState extends State<GestionFianza> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Falta \$${saldo.toInt()}',
+                'Falta \$${AppConstants.formatearMoneda(saldo.toInt())}',
                 style: const TextStyle(fontSize: 16),
               ),
 
@@ -173,7 +175,7 @@ class _GestionFianzaState extends State<GestionFianza> {
 
               const SizedBox(height: 10),
               Text(
-                'Valor del pedido: ${total.toInt()}',
+                'Valor del pedido: ${AppConstants.formatearMoneda(total.toInt())}',
                 style: const TextStyle(color: Colors.grey),
               ),
 

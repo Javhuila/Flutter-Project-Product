@@ -19,6 +19,8 @@ import 'package:flutter_project_product/Theme/theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class Pedidos extends StatefulWidget {
   const Pedidos({super.key});
 
@@ -232,22 +234,9 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     });
   }
 
-  String _normalize(String text) {
-    const withAccents = 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑ';
-    const withoutAccents = 'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUN';
-
-    String result = text;
-
-    for (int i = 0; i < withAccents.length; i++) {
-      result = result.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-
-    return result.toLowerCase().trim();
-  }
-
   void _actualizarPedidosVisibles() {
     final rawQuery = _searchController.text.trim();
-    final queryNorm = _normalize(rawQuery);
+    final queryNorm = AppConstants.normalizeText(rawQuery);
     List<DocumentSnapshot> pedidosFiltrados = List.from(_pedidosCargados);
 
     // 1. Filtrar por fecha
@@ -262,8 +251,9 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
         } else {
           fechaPedido = DateTime.now();
         }
-        final fechaStr = _formatearFecha(fechaPedido);
-        return _normalize(fechaStr) == _normalize(_fechaSeleccionada!);
+        final fechaStr = AppConstants.formatearFecha(fechaPedido);
+        return AppConstants.normalizeText(fechaStr) ==
+            AppConstants.normalizeText(_fechaSeleccionada!);
       }).toList();
     }
 
@@ -282,7 +272,9 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     if (queryNorm.isNotEmpty) {
       pedidosFiltrados = pedidosFiltrados.where((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        final cliente = _normalize((data['cliente'] ?? '').toString());
+        final cliente = AppConstants.normalizeText(
+          (data['cliente'] ?? '').toString(),
+        );
 
         DateTime? fechaObj;
         if (data['fecha'] is Timestamp) {
@@ -292,11 +284,11 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
         }
         String fechaStr = '';
         if (fechaObj != null) {
-          fechaStr = _formatearFecha(fechaObj);
+          fechaStr = AppConstants.formatearFecha(fechaObj);
         }
 
         return cliente.contains(queryNorm) ||
-            _normalize(fechaStr).contains(queryNorm);
+            AppConstants.normalizeText(fechaStr).contains(queryNorm);
       }).toList();
     }
 
@@ -792,7 +784,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
           .map((pedido) {
             final data = pedido.data() as Map<String, dynamic>;
             final fecha = (data['fecha'] as Timestamp).toDate();
-            return _formatearFecha(fecha);
+            return AppConstants.formatearFecha(fecha);
           })
           .toSet()
           .toList();
@@ -887,7 +879,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
       } else {
         fechaPedido = DateTime.now();
       }
-      final claveFecha = _formatearFecha(fechaPedido);
+      final claveFecha = AppConstants.formatearFecha(fechaPedido);
       fechasSet.add(claveFecha);
     }
 
@@ -992,30 +984,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     }
   }
 
-  String _formatearFecha(DateTime fecha) {
-    final ahora = DateTime.now();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    final fechaSinHora = DateTime(fecha.year, fecha.month, fecha.day);
-
-    final diferencia = hoy.difference(fechaSinHora).inDays;
-
-    if (diferencia == 0) return 'Hoy';
-    if (diferencia == 1) return 'Ayer';
-
-    // Ej: 01 de septiembre de 2025
-    return "${fecha.day.toString().padLeft(2, '0')} de "
-        "${_nombreMes(fecha.month)} de ${fecha.year}";
-  }
-
-  String _nombreMes(int mes) {
-    const meses = [
-      '', // posición 0 vacía para que enero sea índice 1
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-    ];
-    return meses[mes];
-  }
-
   Map<String, List<DocumentSnapshot>> _agruparPorFecha(
     List<DocumentSnapshot> pedidos,
   ) {
@@ -1033,7 +1001,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
         fechaPedido = DateTime.now();
       }
 
-      final claveFecha = _formatearFecha(fechaPedido);
+      final claveFecha = AppConstants.formatearFecha(fechaPedido);
 
       agrupados.putIfAbsent(claveFecha, () => []).add(pedido);
     }
@@ -1570,17 +1538,11 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     final numSmall = numBig.length > 2
         ? numBig.substring(numBig.length - 2)
         : numBig.padLeft(2, '0');
-    const formasPago = {
-      'entrega': 'Pago por entrega',
-      'bancario': 'Pago bancario',
-      'cuotas': 'Cuotas',
-      'fianza': 'Fianza / Credito',
-    };
     // final pago = pedido['pago'];
 
     String getTextoFormaPago(String formaPago, Map<String, dynamic>? pago) {
       if (pago == null) {
-        return formasPago[formaPago] ?? formaPago;
+        return AppConstants.formasPago[formaPago] ?? formaPago;
       }
 
       final extra = pago['extra'] as Map<String, dynamic>? ?? {};
@@ -1606,10 +1568,10 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
 
       // ================= CRÉDITO =================
       if (formaPago == 'cuotas' || formaPago == 'fianza') {
-        return formasPago[formaPago] ?? formaPago;
+        return AppConstants.formasPago[formaPago] ?? formaPago;
       }
 
-      return formasPago[formaPago] ?? formaPago;
+      return AppConstants.formasPago[formaPago] ?? formaPago;
     }
 
     return SlideTransition(
@@ -1756,7 +1718,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                "Total: \$${data['valor_total']}",
+                                "Total: \$${AppConstants.formatearMoneda(data['valor_total'])}",
                                 style: const TextStyle(fontSize: 16),
                               ),
                               const SizedBox(height: 8),
@@ -1997,9 +1959,8 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
       text: entidadBancariaOtro ?? '',
     );
 
-    const bancos = ['nequi', 'bancolombia', 'davivienda', 'otro'];
-
-    if (entidadBancaria != null && !bancos.contains(entidadBancaria)) {
+    if (entidadBancaria != null &&
+        !AppConstants.bancos.contains(entidadBancaria)) {
       entidadBancaria = null;
     }
 
