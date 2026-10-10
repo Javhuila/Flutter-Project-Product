@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Pedidos/pedidos.dart';
 
+import '../Utils/Constans/app_constants.dart';
+import 'config_pago.dart';
+
 class EditPedidos extends StatefulWidget {
   final DocumentSnapshot pedido;
   const EditPedidos({super.key, required this.pedido});
@@ -17,7 +20,8 @@ class _EditPedidosState extends State<EditPedidos> {
 
   final TextEditingController _cantidadController = TextEditingController();
   final TextEditingController _observacionController = TextEditingController();
-
+  final FocusNode _cantidadFocusNode = FocusNode();
+  final FocusNode _otroFocusNode = FocusNode();
   Map<String, dynamic> _preciosEspecialesCliente = {};
 
   List<Map<String, dynamic>> _productosAgregados = [];
@@ -36,6 +40,10 @@ class _EditPedidosState extends State<EditPedidos> {
   String _formaPagoActual = 'entrega';
   Map<String, dynamic>? _pagoActual;
 
+  /// Pago bancario
+  String? _entidadBancaria;
+  String? _entidadBancariaOtro;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +61,16 @@ class _EditPedidosState extends State<EditPedidos> {
     _clienteNombre = data['cliente'] ?? '';
     _formaPagoActual = data['forma_pago'] ?? 'entrega';
     _pagoActual = data['pago'];
+    final pagoData = data['pago'];
+
+    if (pagoData is Map) {
+      final extra = pagoData['extra'];
+
+      if (extra is Map) {
+        _entidadBancaria = extra['entidad']?.toString();
+        _entidadBancariaOtro = extra['otro']?.toString();
+      }
+    }
     final fecha = data['fecha'];
     if (fecha is Timestamp) {
       final date = fecha.toDate();
@@ -83,10 +101,13 @@ class _EditPedidosState extends State<EditPedidos> {
   @override
   void dispose() {
     _cantidadController.dispose();
+    _cantidadFocusNode.dispose();
+    _otroFocusNode.dispose();
     super.dispose();
   }
 
   void _agregarProducto() {
+    _cantidadFocusNode.unfocus();
     if (_formKeySecond.currentState!.validate() && _selectedProduct != null) {
       final producto = _productosStore.firstWhere(
         (p) => p['nombre'] == _selectedProduct,
@@ -246,8 +267,10 @@ class _EditPedidosState extends State<EditPedidos> {
     try {
       final originalData = widget.pedido.data() as Map<String, dynamic>;
 
-      final formaAnterior = _formaPagoActual;
-      final pagoAnterior = originalData['pago'];
+      final formaAnterior = originalData['forma_pago']?.toString() ?? 'entrega';
+      final pagoAnterior = originalData['pago'] is Map
+          ? Map<String, dynamic>.from(originalData['pago'])
+          : null;
 
       final originalFecha = originalData['fecha'];
       final originalAdminId = originalData['adminId'];
@@ -256,6 +279,7 @@ class _EditPedidosState extends State<EditPedidos> {
       final creadorNombre = originalData['creado_por_nombre'];
 
       final nuevoTotal = _calcularTotalProducto();
+      Map<String, dynamic>? pagoActualizado = _pagoActual;
 
       final currentUser = FirebaseAuth.instance.currentUser;
 
@@ -293,6 +317,43 @@ class _EditPedidosState extends State<EditPedidos> {
         return;
       }
 
+      Map<String, dynamic>? extraPago;
+
+      if (_formaPagoActual == 'entrega') {
+        extraPago = {'metodo': 'efectivo'};
+      }
+
+      if (_formaPagoActual == 'bancario') {
+        extraPago = {
+          'entidad': _entidadBancaria == 'otro' ? 'otro' : _entidadBancaria,
+          'otro': _entidadBancaria == 'otro' ? _entidadBancariaOtro : null,
+        };
+      }
+
+      if (_formaPagoActual == 'cuotas' && _pagoActual != null) {
+        final cantidadCuotas = (_pagoActual!['cuotas'] ?? 0) as int;
+
+        final pagado = (_pagoActual!['pagado'] ?? 0).toDouble();
+
+        pagoActualizado = {
+          ..._pagoActual!,
+          'tipo': 'cuotas',
+          'cuotas': cantidadCuotas,
+          'valor_cuota': cantidadCuotas > 0 ? nuevoTotal / cantidadCuotas : 0.0,
+          'pagado': pagado,
+        };
+      }
+
+      if (_formaPagoActual == 'fianza' && _pagoActual != null) {
+        final pagado = (_pagoActual!['pagado'] ?? 0).toDouble();
+
+        pagoActualizado = {..._pagoActual!, 'tipo': 'fianza', 'pagado': pagado};
+      }
+
+      if (extraPago != null) {
+        pagoActualizado = {...?pagoActualizado, 'extra': extraPago};
+      }
+
       final updatedData = {
         'productos': _productosAgregados,
         'productos_contabilizado': _productosAgregados.length,
@@ -303,7 +364,7 @@ class _EditPedidosState extends State<EditPedidos> {
         ),
         'valor_total': nuevoTotal,
         'forma_pago': _formaPagoActual,
-        'pago': _pagoActual,
+        'pago': pagoActualizado,
         'fecha': originalFecha,
         'creado_por': creadorId,
         'creado_por_nombre': creadorNombre,
@@ -358,7 +419,7 @@ class _EditPedidosState extends State<EditPedidos> {
 
     final esCreditoAhora = formaNueva == 'cuotas' || formaNueva == 'fianza';
 
-    final deudaId = pagoAnterior?['referencia_pago'];
+    final deudaId = pagoAnterior?['referencia_pago']?.toString();
 
     // ================= CONTADO → CRÉDITO =================
 
@@ -369,51 +430,86 @@ class _EditPedidosState extends State<EditPedidos> {
 
     // ================= CRÉDITO → CONTADO =================
 
-    if (esCreditoAntes && !esCreditoAhora && deudaId != null) {
-      await fs.collection('deudas').doc(deudaId).update({
+    if (esCreditoAntes && !esCreditoAhora) {
+      if (deudaId == null || deudaId.isEmpty) {
+        debugPrint(
+          'Advertencia: el pedido tenía forma de pago '
+          '$formaAnterior, pero no tiene referencia de deuda.',
+        );
+        return;
+      }
+
+      final deudaRef = fs.collection('deudas').doc(deudaId);
+      final deudaSnapshot = await deudaRef.get();
+
+      if (!deudaSnapshot.exists) {
+        debugPrint(
+          'Advertencia: no existe la deuda $deudaId '
+          'asociada al pedido $pedidoId.',
+        );
+        return;
+      }
+
+      await deudaRef.update({
         'estado': 'cancelado',
         'actualizado_en': Timestamp.now(),
       });
-
       return;
     }
 
     // ================= CRÉDITO → CRÉDITO =================
 
-    if (esCreditoAntes && esCreditoAhora && deudaId != null) {
-      final ref = fs.collection('deudas').doc(deudaId);
+    if (esCreditoAntes && esCreditoAhora) {
+      if (deudaId == null || deudaId.isEmpty) {
+        debugPrint(
+          'Advertencia: el pedido continúa como crédito '
+          'pero no tiene referencia de deuda.',
+        );
 
-      final snap = await ref.get();
-
-      if (!snap.exists) return;
-
-      final data = snap.data()!;
-
-      final pagado = (data['pagado'] ?? 0).toDouble();
-
-      final nuevoSaldo = nuevoTotal - pagado;
-
-      String nuevoEstado;
-
-      if (nuevoSaldo <= 0) {
-        nuevoEstado = 'pagado';
-      } else {
-        nuevoEstado = 'activo';
+        return;
       }
 
-      await ref.update({
+      final deudaRef = fs.collection('deudas').doc(deudaId);
+      final deudaSnapshot = await deudaRef.get();
+
+      if (!deudaSnapshot.exists) {
+        debugPrint(
+          'Advertencia: la deuda $deudaId no existe '
+          'para el pedido $pedidoId.',
+        );
+
+        return;
+      }
+
+      final data = deudaSnapshot.data()!;
+      final pagado = (data['pagado'] ?? 0).toDouble();
+
+      if (nuevoTotal < pagado) {
+        throw Exception(
+          'El nuevo total (\$${nuevoTotal.toStringAsFixed(2)}) '
+          'no puede ser menor al valor ya pagado '
+          '(\$${pagado.toStringAsFixed(2)}).',
+        );
+      }
+
+      final nuevoSaldo = nuevoTotal - pagado;
+      final nuevoEstado = nuevoSaldo <= 0 ? 'pagado' : 'activo';
+
+      await deudaRef.update({
+        'tipo': formaNueva,
         'total': nuevoTotal,
         'saldo': nuevoSaldo,
         'estado': nuevoEstado,
         'actualizado_en': Timestamp.now(),
       });
 
-      // TAMBIÉN ACTUALIZAR RESUMEN EN PEDIDO
+      // Mantener sincronizado el resumen del pedido.
       await fs.collection('pedidos').doc(pedidoId).update({
         'pago.resumen.total': nuevoTotal,
         'pago.resumen.saldo': nuevoSaldo,
         'pago.resumen.pagado': pagado,
       });
+      return;
     }
   }
 
@@ -447,6 +543,41 @@ class _EditPedidosState extends State<EditPedidos> {
         'referencia_pago': deudaRef.id,
         'resumen': {'total': total, 'pagado': 0, 'saldo': total},
       },
+    });
+  }
+
+  Future<void> _seleccionarFormaPago(String? nuevaFormaPago) async {
+    if (nuevaFormaPago == null) return;
+
+    if (nuevaFormaPago == 'cuotas' || nuevaFormaPago == 'fianza') {
+      final configuracion = await Navigator.push<Map<String, dynamic>>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ConfigPago(
+            tipoPago: nuevaFormaPago,
+            totalPedido: _calcularTotalProducto(),
+          ),
+        ),
+      );
+
+      if (configuracion == null || !mounted) return;
+
+      setState(() {
+        _formaPagoActual = nuevaFormaPago;
+        _pagoActual = configuracion;
+      });
+
+      return;
+    }
+
+    setState(() {
+      _formaPagoActual = nuevaFormaPago;
+
+      if (nuevaFormaPago == 'entrega') {
+        _pagoActual = {'tipo': 'entrega', 'pagado': 0.0};
+      } else if (nuevaFormaPago == 'bancario') {
+        _pagoActual = {'tipo': 'bancario', 'pagado': 0.0};
+      }
     });
   }
 
@@ -685,6 +816,7 @@ class _EditPedidosState extends State<EditPedidos> {
                           const SizedBox(height: 15),
                           TextFormField(
                             controller: _cantidadController,
+                            focusNode: _cantidadFocusNode,
                             decoration: const InputDecoration(
                               suffixIcon: Icon(Icons.onetwothree_rounded),
                               hintText: "Digita una cantidad",
@@ -728,6 +860,7 @@ class _EditPedidosState extends State<EditPedidos> {
                                     _isClienteEspecial
                                         ? DataCell(
                                             TextFormField(
+                                              key: ValueKey(item),
                                               initialValue: item['precio']
                                                   .toString(),
                                               keyboardType:
@@ -773,12 +906,103 @@ class _EditPedidosState extends State<EditPedidos> {
                           Container(
                             margin: EdgeInsets.symmetric(horizontal: 5),
                             child: Text(
-                              "El total es de: \$${_calcularTotalProducto().toStringAsFixed(2)}",
+                              "El total es de: \$${AppConstants.formatearMoneda(_calcularTotalProducto())}",
                             ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 15),
+                    DropdownButtonFormField<String>(
+                      initialValue: _formaPagoActual,
+                      decoration: const InputDecoration(
+                        labelText: 'Forma de pago',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'entrega',
+                          child: Text('Pago por entrega'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'bancario',
+                          child: Text('Pago bancario'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'cuotas',
+                          child: Text('Cuotas'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fianza',
+                          child: Text('Fianza / Crédito'),
+                        ),
+                      ],
+                      onChanged: _seleccionarFormaPago,
+                    ),
+                    if (_formaPagoActual == 'entrega')
+                      const Padding(
+                        padding: EdgeInsets.only(top: 12),
+                        child: Text(
+                          'Método de pago: Efectivo',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+
+                    // ------------------------
+                    // BANCARIO
+                    // ------------------------
+                    if (_formaPagoActual == 'bancario') ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _entidadBancaria,
+                        decoration: const InputDecoration(
+                          labelText: 'Entidad bancaria',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'nequi',
+                            child: Text('Nequi'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'bancolombia',
+                            child: Text('BanColombia'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'davivienda',
+                            child: Text('Davivienda'),
+                          ),
+                          DropdownMenuItem(value: 'otro', child: Text('Otro')),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _entidadBancaria = value;
+                          });
+                        },
+                        validator: (value) {
+                          if (value == null) {
+                            return 'Seleccione una entidad bancaria';
+                          }
+                          return null;
+                        },
+                      ),
+                      if (_entidadBancaria == 'otro')
+                        TextFormField(
+                          focusNode: _otroFocusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre de entidad',
+                          ),
+                          onChanged: (value) {
+                            _entidadBancariaOtro = value;
+                          },
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Este campo es obligatorio!!!';
+                            }
+                            return null;
+                          },
+                        ),
+                    ],
                     const SizedBox(height: 15),
                     ElevatedButton(
                       onPressed: _guardarPedido,
