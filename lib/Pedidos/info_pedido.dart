@@ -12,6 +12,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class InfoPedido extends StatefulWidget {
   final DocumentSnapshot pedido;
   const InfoPedido({super.key, required this.pedido});
@@ -181,14 +183,7 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
       String textoDeuda = '';
       String textoUltimoPago = '';
 
-      const formasPagoMap = {
-        'entrega': 'Pago por entrega',
-        'bancario': 'Pago bancario',
-        'cuotas': 'Cuotas',
-        'fianza': 'Fianza / Crédito',
-      };
-
-      textoFormaPago = formasPagoMap[formaPago] ?? formaPago;
+      textoFormaPago = AppConstants.formasPago[formaPago] ?? formaPago;
 
       if (pago != null && pago['resumen'] != null) {
         final resumen = pago['resumen'];
@@ -224,13 +219,13 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                 final totalCuotas = deudaData?['config']?['cuotas'] ?? 0;
 
                 textoDeuda =
-                    'Cuotas: ${historial.length} / $totalCuotas\nSaldo: \$${saldo.toInt()}';
+                    'Cuotas: ${historial.length} / $totalCuotas\nSaldo: \$${AppConstants.formatearMoneda(saldo)}';
               }
 
               // Fianza
               if (formaPago == 'fianza') {
                 textoDeuda =
-                    'Pagado: \$${pagado.toInt()} / \$${total.toInt()}\nSaldo: \$${saldo.toInt()}';
+                    'Pagado: \$${pagado.toInt()} / \$${AppConstants.formatearMoneda(total)}\nSaldo: \$${AppConstants.formatearMoneda(saldo)}';
               }
             }
           } catch (_) {}
@@ -406,7 +401,7 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                     pw.Expanded(
                       flex: 1,
                       child: pw.Text(
-                        "\$${prod['precio']}",
+                        "\$${AppConstants.formatearMoneda(prod['precio'])}",
                         textAlign: pw.TextAlign.end,
                         style: pw.TextStyle(fontSize: 17),
                       ),
@@ -414,7 +409,7 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                     pw.Expanded(
                       flex: 1,
                       child: pw.Text(
-                        "\$${prod['total']}",
+                        "\$${AppConstants.formatearMoneda(prod['total'])}",
                         textAlign: pw.TextAlign.end,
                         style: pw.TextStyle(fontSize: 17),
                       ),
@@ -440,11 +435,12 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                   ),
                   pw.Expanded(
                     child: pw.Text(
-                      "\$${valorTotal.toStringAsFixed(2)}",
+                      "\$${AppConstants.formatearMoneda(valorTotal)}",
                       textAlign: pw.TextAlign.end,
                       style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold,
-                        fontSize: 20,
+                        fontSize: 24,
+                        color: PdfColors.redAccent700,
                       ),
                     ),
                   ),
@@ -473,7 +469,7 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
       );
 
       final output = await getTemporaryDirectory();
-      final file = File("${output.path}/pedido_${cliente}_$fecha.pdf");
+      final file = File("${output.path}/${valorTotal}_${cliente}_$fecha.pdf");
       await file.writeAsBytes(await pdf.save());
 
       return file;
@@ -801,6 +797,7 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final data = widget.pedido.data() as Map<String, dynamic>;
+
     final List productos = data['productos'] ?? [];
     final cliente = data['cliente'] ?? '';
     final numPedido = data['numero_pedido'] ?? [];
@@ -817,13 +814,6 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
     }
     final observacion = data['observacion'] ?? '';
     final valorTotal = data['valor_total'] ?? 0;
-
-    const formasPago = {
-      'entrega': 'Pago por entrega',
-      'bancario': 'Pago bancario',
-      'cuotas': 'Cuotas',
-      'fianza': 'Fianza / Credito',
-    };
 
     if (_isLoadingRole) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -873,7 +863,7 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                       style: const TextStyle(fontSize: 18),
                     ),
                     SizedBox(height: 15),
-                    Text("Forma de pago: ${formasPago[formPago]}"),
+                    Text("Forma de pago: ${AppConstants.formasPago[formPago]}"),
                     const SizedBox(height: 15),
                     Text("Fecha: $fecha"),
                     const SizedBox(height: 15),
@@ -902,9 +892,11 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                           child: ListTile(
                             title: Text(producto['nombre'] ?? ''),
                             subtitle: Text(
-                              "Cantidad: ${producto['cantidad']}  |  Precio: \$${producto['precio']}",
+                              "Cantidad: ${producto['cantidad']}  |  Precio: \$${AppConstants.formatearMoneda(producto['precio'])}",
                             ),
-                            trailing: Text("Total: \$${producto['total']}"),
+                            trailing: Text(
+                              "Total: \$${AppConstants.formatearMoneda(producto['total'])}",
+                            ),
                           ),
                         );
                       },
@@ -912,7 +904,7 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                     const SizedBox(height: 10),
                     Center(
                       child: Text(
-                        "Total General: \$${valorTotal.toStringAsFixed(2)}",
+                        "Total General: \$${AppConstants.formatearMoneda(valorTotal)}",
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -1154,8 +1146,10 @@ class _InfoPedidoState extends State<InfoPedido> with TickerProviderStateMixin {
                 ],
 
                 if (tipo == 'fianza') ...[
-                  Text('Pagado: \$${pagado.toInt()} / \$${total.toInt()}'),
-                  Text('Saldo: \$${saldo.toInt()}'),
+                  Text(
+                    'Pagado: \$${AppConstants.formatearMoneda(pagado)} / \$${AppConstants.formatearMoneda(total)}',
+                  ),
+                  Text('Saldo: \$${AppConstants.formatearMoneda(saldo)}'),
                 ],
 
                 if (ultimaFecha != null)
