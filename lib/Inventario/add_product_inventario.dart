@@ -5,12 +5,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:flutter_project_product/Inventario/inventario.dart';
 import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
 import 'package:intl/intl.dart';
 
 class AddProductInventario extends StatefulWidget {
-  const AddProductInventario({super.key});
+  final String inventarioId;
+  final String nombreInventario;
+
+  const AddProductInventario({
+    super.key,
+    required this.inventarioId,
+    required this.nombreInventario,
+  });
 
   @override
   State<AddProductInventario> createState() => _AddProductInventarioState();
@@ -143,7 +149,7 @@ class _AddProductInventarioState extends State<AddProductInventario> {
     if (snapshot.docs.length < _limit) {
       _hasMore = false;
     }
-
+    if (!mounted) return;
     setState(() => _isLoading = false);
   }
 
@@ -271,7 +277,11 @@ class _AddProductInventarioState extends State<AddProductInventario> {
       final firestore = FirebaseFirestore.instance;
       final fechaHoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-      final inventarioDocRef = firestore.collection('inventario').doc(fechaHoy);
+      final inventarioDocRef = firestore
+          .collection('inventarios')
+          .doc(widget.inventarioId)
+          .collection('fechas')
+          .doc(fechaHoy);
 
       final inventarioDoc = await inventarioDocRef.get();
 
@@ -321,9 +331,8 @@ class _AddProductInventarioState extends State<AddProductInventario> {
 
       //  Navigator.pushReplacementNamed(context, '/inventario');
       // O si usas MaterialPageRoute:
-      navigator.pushReplacement(
-        MaterialPageRoute(builder: (_) => const Inventario()),
-      );
+      if (!mounted) return;
+      navigator.pop();
     } catch (e) {
       navigator.pop();
       messenger.showSnackBar(
@@ -344,7 +353,7 @@ class _AddProductInventarioState extends State<AddProductInventario> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Seleccionar productos"),
+        title: Text(widget.nombreInventario),
         actions: _userRole == 'admin'
             ? [
                 IconButton(
