@@ -22,6 +22,7 @@ class _AddProductosState extends State<AddProductos> {
   final _nombreController = TextEditingController();
   final _contenidoController = TextEditingController();
   final _precioController = TextEditingController();
+  final _precioEmpresaController = TextEditingController();
   final _marcaController = TextEditingController();
 
   File? _image;
@@ -81,103 +82,6 @@ class _AddProductosState extends State<AddProductos> {
           .toList();
     });
   }
-
-  // Future<void> _showAddTipoDialog(
-  //   BuildContext context, {
-  //   required String tipo,
-  // }) async {
-  //   final opcion = await showDialog<String>(
-  //     context: context,
-  //     builder: (_) => AlertDialog(
-  //       title: Text(
-  //         tipo == 'categoria'
-  //             ? 'Administrar categorías'
-  //             : 'Administrar clasificaciones',
-  //       ),
-  //       content: const Text('¿Qué deseas hacer?'),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context, 'agregar'),
-  //           child: const Text('Agregar'),
-  //         ),
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context, 'eliminar'),
-  //           child: const Text('Eliminar'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  //   if (opcion == 'agregar') {
-  //     tipo == 'categoria' ? null : await addClasificacionProductos(context);
-  //   } else if (opcion == 'eliminar') {
-  //     tipo == 'categoria'
-  //         ? await showEliminarTipoDialog(context, tipo: 'categoria')
-  //         : await showEliminarTipoDialog(context, tipo: 'clasificacion');
-  //   }
-  //   // después recargar
-  //   await _loadCategorias();
-  //   await _loadClasificaciones();
-  // }
-
-  // Future<void> showEliminarTipoDialog(
-  //   BuildContext context, {
-  //   required String tipo,
-  // }) async {
-  //   final currentUser = FirebaseAuth.instance.currentUser;
-  //   if (currentUser == null) return;
-
-  //   final userDoc = await FirebaseFirestore.instance
-  //       .collection('users')
-  //       .doc(currentUser.uid)
-  //       .get();
-
-  //   String adminId = currentUser.uid;
-  //   if (userDoc.exists && userDoc.data()?['adminId'] != null) {
-  //     adminId = userDoc['adminId'];
-  //   }
-
-  //   final coll = tipo == 'categoria'
-  //       ? FirebaseFirestore.instance.collection('categorias')
-  //       : FirebaseFirestore.instance.collection('clasificacion');
-
-  //   final snapshot = await coll.where('adminId', isEqualTo: adminId).get();
-  //   final opciones = snapshot.docs;
-
-  //   final idToDelete = await showDialog<String>(
-  //     context: context,
-  //     builder: (_) => AlertDialog(
-  //       title: Text(
-  //         tipo == 'categoria' ? 'Eliminar categoría' : 'Eliminar clasificación',
-  //       ),
-  //       content: SizedBox(
-  //         width: double.maxFinite,
-  //         child: ListView.builder(
-  //           shrinkWrap: true,
-  //           itemCount: opciones.length,
-  //           itemBuilder: (_, i) {
-  //             final nombre = opciones[i]['nombre'];
-  //             return ListTile(
-  //               title: Text(nombre),
-  //               onTap: () => Navigator.pop(context, opciones[i].id),
-  //             );
-  //           },
-  //         ),
-  //       ),
-  //     ),
-  //   );
-
-  //   if (idToDelete != null) {
-  //     await coll.doc(idToDelete).delete();
-  //     if (!mounted) return;
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(
-  //         content: Text(
-  //           '${tipo[0].toUpperCase()}${tipo.substring(1)} eliminada',
-  //         ),
-  //       ),
-  //     );
-  //   }
-  // }
 
   Future<void> pickImage() async {
     if (_isPickingImage) return;
@@ -271,6 +175,8 @@ class _AddProductosState extends State<AddProductos> {
             nombre: _nombreController.text.trim(),
             contenido: _contenidoController.text.trim(),
             precio: double.tryParse(_precioController.text.trim()) ?? 0,
+            precioEmpresa:
+                double.tryParse(_precioEmpresaController.text.trim()) ?? 0,
             marca: _marcaController.text.trim(),
             categoria: _selectedCategory!,
             clasificacion: _selectedClasifica!,
@@ -430,6 +336,22 @@ class _AddProductosState extends State<AddProductos> {
                     return null;
                   },
                   decoration: InputDecoration(labelText: "Precio"),
+                ),
+                const SizedBox(height: 15),
+                TextFormField(
+                  controller: _precioEmpresaController,
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Campo requerido';
+                    }
+                    final parsed = double.tryParse(value);
+                    if (parsed == null) {
+                      return 'Ingrese un número válido';
+                    }
+                    return null;
+                  },
+                  decoration: InputDecoration(labelText: "Precio Empresa"),
                 ),
                 const SizedBox(height: 15),
                 TextFormField(
