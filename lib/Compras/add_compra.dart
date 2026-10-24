@@ -225,7 +225,7 @@ class _AddCompraState extends State<AddCompra> {
       "total_productos": productos.length,
       "productos": productos,
     });
-
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
