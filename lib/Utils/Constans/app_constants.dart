@@ -45,12 +45,42 @@ class AppConstants {
     return meses[mes];
   }
 
-  static DateTime parseFecha(String fechaStr) {
-    final partes = fechaStr.split('/');
-    final day = int.parse(partes[0]);
-    final month = int.parse(partes[1]);
-    final year = int.parse(partes[2]);
-    return DateTime(year, month, day);
+  static DateTime? parseFecha(String fechaStr) {
+    try {
+      final fecha = fechaStr.trim();
+      final partes = fecha.contains('-') ? fecha.split('-') : fecha.split('/');
+
+      if (partes.length != 3) return null;
+
+      int dia;
+      int mes;
+      int anio;
+
+      if (fecha.contains('-')) {
+        // Formato: yyyy-MM-dd
+        anio = int.parse(partes[0]);
+        mes = int.parse(partes[1]);
+        dia = int.parse(partes[2]);
+      } else {
+        // Formato: dd/MM/yyyy
+        dia = int.parse(partes[0]);
+        mes = int.parse(partes[1]);
+        anio = int.parse(partes[2]);
+      }
+
+      // Evita aceptar fechas inexistentes, como 31/02/2026.
+      final resultado = DateTime(anio, mes, dia);
+
+      if (resultado.year != anio ||
+          resultado.month != mes ||
+          resultado.day != dia) {
+        return null;
+      }
+
+      return resultado;
+    } catch (_) {
+      return null;
+    }
   }
 
   static String formatFecha(DateTime fecha) {
@@ -59,6 +89,28 @@ class AppConstants {
     final anio = fecha.year;
 
     return '$dia/$mes/$anio';
+  }
+
+  // Convierte DateTime a yyyy-MM-dd.
+  static String formatFechaISO(DateTime fecha) {
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    final anio = fecha.year;
+
+    return '$anio-$mes-$dia';
+  }
+
+  // Comprueba si una fecha corresponde al día actual.
+  static bool esHoy(String fecha) {
+    final fechaDato = parseFecha(fecha);
+
+    if (fechaDato == null) return false;
+
+    final hoy = DateTime.now();
+
+    return fechaDato.year == hoy.year &&
+        fechaDato.month == hoy.month &&
+        fechaDato.day == hoy.day;
   }
 
   static const formasPago = {
