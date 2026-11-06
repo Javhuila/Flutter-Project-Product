@@ -105,22 +105,7 @@ class _InventarioState extends State<Inventario> {
     adminId = data['adminId'] ?? user.uid;
   }
 
-  bool _esHoy(String fecha) {
-    final hoy = DateTime.now();
-    final partes = fecha.split('-'); // Ajusta al formato que uses
-    final fechaDato = DateTime(
-      int.parse(partes[0]),
-      int.parse(partes[1]),
-      int.parse(partes[2]),
-    );
-
-    return fechaDato.year == hoy.year &&
-        fechaDato.month == hoy.month &&
-        fechaDato.day == hoy.day;
-  }
-
   Future<void> _crearInventarioDelDia() async {
-    final fechaHoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final fechaRef = _fechasRef.doc(fechaHoy);
 
     final doc = await fechaRef.get();
@@ -140,22 +125,6 @@ class _InventarioState extends State<Inventario> {
         'Inventario "${widget.nombreInventario}" del día '
         '$fechaHoy ya existe.',
       );
-    }
-  }
-
-  DateTime? _parseFecha(String fecha) {
-    try {
-      final parts = fecha.split('-');
-
-      if (parts.length != 3) return null;
-
-      return DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-    } catch (_) {
-      return null;
     }
   }
 
@@ -184,7 +153,7 @@ class _InventarioState extends State<Inventario> {
           .get();
 
       for (final fechaDoc in fechasSnapshot.docs) {
-        final fecha = _parseFecha(fechaDoc.id);
+        final fecha = AppConstants.parseFecha(fechaDoc.id);
 
         if (fecha == null) continue;
 
@@ -981,7 +950,7 @@ class _InventarioState extends State<Inventario> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final hoy = AppConstants.formatFechaISO(DateTime.now());
 
     return Scaffold(
       appBar: AppBar(
@@ -1008,6 +977,17 @@ class _InventarioState extends State<Inventario> {
                       ),
                     );
                     setState(() {});
+                  },
+                ),
+                Builder(
+                  builder: (context) {
+                    return IconButton(
+                      icon: const Icon(Icons.filter_list),
+                      tooltip: "Filtros",
+                      onPressed: () {
+                        Scaffold.of(context).openDrawer();
+                      },
+                    );
                   },
                 ),
               ]
@@ -1191,7 +1171,7 @@ class _InventarioState extends State<Inventario> {
                               ),
                               initiallyExpanded: abierto,
                               leading: Icon(
-                                _esHoy(fecha)
+                                AppConstants.esHoy(fecha)
                                     ? Icons.calendar_today
                                     : Icons.calendar_month,
                                 size: 20,
