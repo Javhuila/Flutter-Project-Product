@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'inventario.dart';
+import 'productos_asignados_page.dart';
 
 class InventariosPage extends StatefulWidget {
   const InventariosPage({super.key});
@@ -248,7 +249,14 @@ class _InventariosPageState extends State<InventariosPage> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Agregar producto'),
+                onTap: () {
+                  Navigator.pop(context, 'agregarProd');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
                 title: const Text(
                   'Desactivar',
                   style: TextStyle(color: Colors.red),
@@ -288,6 +296,10 @@ class _InventariosPageState extends State<InventariosPage> {
     switch (opcion) {
       case 'renombrar':
         await _renombrarInventario(inventario);
+        break;
+
+      case 'agregarProd':
+        await _addProductoInventario(inventario);
         break;
 
       case 'desactivar':
@@ -376,6 +388,24 @@ class _InventariosPageState extends State<InventariosPage> {
         ),
       );
     }
+  }
+
+  Future<void> _addProductoInventario(
+    QueryDocumentSnapshot<Map<String, dynamic>> inventario,
+  ) async {
+    if (_userRole != 'admin') return;
+
+    final nombre = inventario.data()['nombre']?.toString() ?? 'Inventario';
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductosAsignadosPage(
+          inventarioId: inventario.id,
+          nombreInventario: nombre,
+        ),
+      ),
+    );
   }
 
   Future<void> _desactivarInventario(
@@ -570,9 +600,22 @@ class _InventariosPageState extends State<InventariosPage> {
           nombre,
           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
         ),
-        subtitle: const Padding(
-          padding: EdgeInsets.only(top: 4),
-          child: Text('Seleccionar inventario'),
+        subtitle: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _firestore
+              .collection('inventarios')
+              .doc(inventario.id)
+              .collection('productos_asignados')
+              .snapshots(),
+          builder: (context, snapshot) {
+            final cantidad = snapshot.data?.docs.length ?? 0;
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '$cantidad productos asignados · Seleccionar inventario',
+              ),
+            );
+          },
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
