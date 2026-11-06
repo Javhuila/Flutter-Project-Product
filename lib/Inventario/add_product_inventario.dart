@@ -6,7 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_project_product/Service/Cloudinary/image_upload_service.dart';
-import 'package:intl/intl.dart';
+
+import '../Utils/Constans/app_constants.dart';
 
 class AddProductInventario extends StatefulWidget {
   final String inventarioId;
@@ -33,6 +34,7 @@ class _AddProductInventarioState extends State<AddProductInventario> {
 
   List<DocumentSnapshot> _productos = [];
   List<DocumentSnapshot> _productosSeleccionados = [];
+  Set<String> _productosAsignadosIds = {};
   bool _isLoading = false;
   bool _hasMore = true;
   final int _limit = 15;
@@ -42,22 +44,47 @@ class _AddProductInventarioState extends State<AddProductInventario> {
   @override
   void initState() {
     super.initState();
-    _cargarProductos();
+    _inicializarProductos();
     _loadUserRole();
     // _scrollController.addListener(_onScroll);
     _searchController.addListener(() {
-      setState(() {
-        if (_debounce?.isActive ?? false) _debounce!.cancel();
+      if (_debounce?.isActive ?? false) {
+        _debounce!.cancel();
+      }
 
-        _debounce = Timer(const Duration(milliseconds: 500), () {
-          _searchText = _searchController.text.trim();
-          _productos.clear();
-          _ultimoDocumento = null;
-          _hasMore = true;
-          _cargarProductos();
-        });
+      _debounce = Timer(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+
+        _searchText = _searchController.text.trim();
+        _cargarProductos(reset: true);
       });
     });
+  }
+
+  Future<void> _inicializarProductos() async {
+    try {
+      final asignacionesSnapshot = await FirebaseFirestore.instance
+          .collection('inventarios')
+          .doc(widget.inventarioId)
+          .collection('productos_asignados')
+          .get();
+
+      _productosAsignadosIds = asignacionesSnapshot.docs
+          .map((doc) => doc.id)
+          .toSet();
+
+      await _cargarProductos(reset: true);
+    } catch (e) {
+      debugPrint('Error al cargar las asignaciones: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al consultar los productos asignados: $e'),
+        ),
+      );
+    }
   }
 
   Future<void> _loadUserRole() async {
@@ -95,62 +122,95 @@ class _AddProductInventarioState extends State<AddProductInventario> {
 
     if (!mounted) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+      if (reset) {
+        _productos.clear();
+        _ultimoDocumento = null;
+        _hasMore = true;
+      }
+    });
 
-    if (reset) {
-      _productos.clear();
-      _ultimoDocumento = null;
-      _hasMore = true;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        throw Exception('No hay un usuario autenticado.');
+      }
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      String adminId = user.uid;
+
+      if (userDoc.exists && userDoc.data()?['adminId'] != null) {
+        adminId = userDoc['adminId'].toString();
+      }
+
+      final objetivo = _productos.length + _limit;
+
+      while (_productos.length < objetivo && _hasMore) {
+        Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+            .collection('productos')
+            .where('adminId', isEqualTo: adminId)
+            .orderBy('nombre')
+            .limit(_limit);
+
+        if (_searchText.isNotEmpty) {
+          query = FirebaseFirestore.instance
+              .collection('productos')
+              .where('adminId', isEqualTo: adminId)
+              .where('nombre', isGreaterThanOrEqualTo: _searchText)
+              .where('nombre', isLessThanOrEqualTo: '$_searchText\uf8ff')
+              .orderBy('nombre')
+              .limit(_limit);
+        }
+
+        if (_ultimoDocumento != null) {
+          query = query.startAfterDocument(_ultimoDocumento!);
+        }
+
+        final snapshot = await query.get();
+
+        if (snapshot.docs.isEmpty) {
+          _hasMore = false;
+          break;
+        }
+
+        _ultimoDocumento = snapshot.docs.last;
+
+        if (snapshot.docs.length < _limit) {
+          _hasMore = false;
+        }
+
+        for (final producto in snapshot.docs) {
+          // Si existen asignaciones, solamente permitimos sus productos.
+          // Si el conjunto está vacío, se muestran todos.
+          if (_productosAsignadosIds.isEmpty ||
+              _productosAsignadosIds.contains(producto.id)) {
+            _productos.add(producto);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error al cargar productos: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar productos: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    String adminId = user.uid;
-    if (userDoc.exists && userDoc.data()?['adminId'] != null) {
-      adminId = userDoc['adminId'];
-    }
-
-    Query query = FirebaseFirestore.instance
-        .collection('productos')
-        .where('adminId', isEqualTo: adminId)
-        .orderBy('nombre')
-        .limit(_limit);
-
-    if (_ultimoDocumento != null && !reset) {
-      query = query.startAfterDocument(_ultimoDocumento!);
-    }
-
-    // Si hay texto de búsqueda, filtramos
-    if (_searchText.isNotEmpty) {
-      query = FirebaseFirestore.instance
-          .collection('productos')
-          .orderBy('nombre')
-          .where('adminId', isEqualTo: adminId)
-          .where('nombre', isGreaterThanOrEqualTo: _searchText)
-          .where('nombre', isLessThanOrEqualTo: '$_searchText\uf8ff')
-          .limit(_limit);
-    }
-
-    QuerySnapshot snapshot = await query.get();
-
-    if (snapshot.docs.isNotEmpty) {
-      _ultimoDocumento = snapshot.docs.last;
-      _productos.addAll(snapshot.docs);
-    } else {
-      _hasMore = false;
-    }
-
-    if (snapshot.docs.length < _limit) {
-      _hasMore = false;
-    }
-    if (!mounted) return;
-    setState(() => _isLoading = false);
   }
 
   // Detecta si llegamos al final del scroll
@@ -175,45 +235,75 @@ class _AddProductInventarioState extends State<AddProductInventario> {
 
   // Seleccionar o deseleccionar todos
   Future<void> _seleccionarTodos() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
 
-    // Si ya todos están seleccionados, deseleccionamos
-    if (_productosSeleccionados.length == _productos.length && !_hasMore) {
+    try {
+      // Si todos los productos disponibles ya están seleccionados,
+      // limpiamos la selección.
+      if (_productosSeleccionados.length == _productos.length && !_hasMore) {
+        setState(() {
+          _productosSeleccionados.clear();
+        });
+        return;
+      }
+
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        throw Exception('No hay un usuario autenticado.');
+      }
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      String adminId = user.uid;
+
+      if (userDoc.exists && userDoc.data()?['adminId'] != null) {
+        adminId = userDoc['adminId'].toString();
+      }
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('productos')
+          .where('adminId', isEqualTo: adminId)
+          .orderBy('nombre')
+          .get();
+
+      // Aplicamos la restricción de asignaciones.
+      final productosDisponibles = snapshot.docs.where((producto) {
+        return _productosAsignadosIds.isEmpty ||
+            _productosAsignadosIds.contains(producto.id);
+      }).toList();
+
+      if (!mounted) return;
+
       setState(() {
-        _productosSeleccionados.clear();
-        _isLoading = false;
+        _productos
+          ..clear()
+          ..addAll(productosDisponibles);
+
+        _productosSeleccionados = List.from(productosDisponibles);
+
+        _hasMore = false;
       });
-      return;
+    } catch (e) {
+      debugPrint('Error al seleccionar todos los productos: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al seleccionar productos: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    // Cargar todos los productos de la colección (sin límite)
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    String adminId = user.uid;
-    if (userDoc.exists && userDoc.data()?['adminId'] != null) {
-      adminId = userDoc['adminId'];
-    }
-
-    final QuerySnapshot allProductsSnapshot = await FirebaseFirestore.instance
-        .collection('productos')
-        .where('adminId', isEqualTo: adminId)
-        .orderBy('nombre')
-        .get();
-
-    setState(() {
-      _productos = allProductsSnapshot.docs; // mostramos todos
-      _productosSeleccionados = List.from(
-        allProductsSnapshot.docs,
-      ); // seleccionamos todos
-      _hasMore = false; // ya no hay más por cargar
-      _isLoading = false;
-    });
   }
 
   Future<void> _guardarInventario(List<DocumentSnapshot> seleccionados) async {
@@ -275,7 +365,7 @@ class _AddProductInventarioState extends State<AddProductInventario> {
       }
 
       final firestore = FirebaseFirestore.instance;
-      final fechaHoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final fechaHoy = AppConstants.formatFechaISO(DateTime.now());
 
       final inventarioDocRef = firestore
           .collection('inventarios')
@@ -342,6 +432,15 @@ class _AddProductInventarioState extends State<AddProductInventario> {
         ),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    _scrollController.dispose();
+
+    super.dispose();
   }
 
   @override
