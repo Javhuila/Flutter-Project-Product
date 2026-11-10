@@ -386,6 +386,8 @@ class _EditPedidosState extends State<EditPedidos> {
         pagoAnterior,
         nuevoTotal,
         pedidoRef.id,
+        originalData,
+        pagoActualizado,
       );
 
       messenger.showSnackBar(
@@ -411,6 +413,8 @@ class _EditPedidosState extends State<EditPedidos> {
     Map<String, dynamic>? pagoAnterior,
     double nuevoTotal,
     String pedidoId,
+    Map<String, dynamic> pedidoData,
+    Map<String, dynamic>? pagoConfigurado,
   ) async {
     final fs = FirebaseFirestore.instance;
 
@@ -424,7 +428,13 @@ class _EditPedidosState extends State<EditPedidos> {
     // ================= CONTADO → CRÉDITO =================
 
     if (!esCreditoAntes && esCreditoAhora) {
-      await _crearNuevaDeuda(pedidoId, nuevoTotal, formaNueva);
+      await _crearNuevaDeuda(
+        pedidoId,
+        nuevoTotal,
+        formaNueva,
+        pedidoData,
+        pagoConfigurado,
+      );
       return;
     }
 
@@ -482,7 +492,7 @@ class _EditPedidosState extends State<EditPedidos> {
       }
 
       final data = deudaSnapshot.data()!;
-      final pagado = (data['pagado'] ?? 0).toDouble();
+      final pagado = (data['pagado'] as num? ?? 0).toDouble();
 
       if (nuevoTotal < pagado) {
         throw Exception(
@@ -517,19 +527,52 @@ class _EditPedidosState extends State<EditPedidos> {
     String pedidoId,
     double total,
     String formaPago,
+    Map<String, dynamic> pedidoData,
+    Map<String, dynamic>? pagoConfigurado,
   ) async {
     final fs = FirebaseFirestore.instance;
 
     final deudaRef = fs.collection('deudas').doc();
 
+    final numeroPedido = pedidoData['numero_pedido'];
+
+    final nombreCliente = pedidoData['cliente'] ?? '';
+    final tipoCliente = pedidoData['tipo'] ?? '';
+
+    // Conservar la configuración recibida desde ConfigPago.
+    final config = Map<String, dynamic>.from(pagoConfigurado ?? {});
+
+    // Recuperar el valor abonado inicialmente.
+    final pagadoInicial = (config['pagado'] as num? ?? 0).toDouble();
+
+    // Calcular el saldo pendiente.
+    final saldoPendiente = total - pagadoInicial;
+
+    // Registrar el aporte inicial en el historial, si existe.
+    final historialInicial = pagadoInicial > 0
+        ? [
+            {
+              'fecha': Timestamp.now(),
+              'monto': pagadoInicial,
+              'tipo': formaPago == 'cuotas' ? 'cuota' : 'aporte',
+            },
+          ]
+        : [];
+
     final deudaData = {
       'pedido_id': pedidoId,
+      'numero_pedido': numeroPedido,
+      'cliente': {'nombre': nombreCliente, 'tipo': tipoCliente},
       'tipo': formaPago,
       'total': total,
-      'pagado': 0.0,
-      'saldo': total,
-      'estado': 'activo',
-      'historial': [],
+      'pagado': pagadoInicial,
+      'saldo': saldoPendiente,
+
+      'estado': saldoPendiente <= 0 ? 'pagado' : 'activo',
+
+      'historial': historialInicial,
+
+      'config': config,
       'creado_en': Timestamp.now(),
       'actualizado_en': Timestamp.now(),
     };
@@ -539,9 +582,14 @@ class _EditPedidosState extends State<EditPedidos> {
     // actualizar pedido
     await fs.collection('pedidos').doc(pedidoId).update({
       'pago': {
+        ...config,
         'tipo': formaPago,
         'referencia_pago': deudaRef.id,
-        'resumen': {'total': total, 'pagado': 0, 'saldo': total},
+        'resumen': {
+          'total': total,
+          'pagado': pagadoInicial,
+          'saldo': saldoPendiente,
+        },
       },
     });
   }
