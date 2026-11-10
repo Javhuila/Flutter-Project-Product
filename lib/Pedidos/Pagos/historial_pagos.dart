@@ -68,6 +68,131 @@ class _HistorialPagosState extends State<HistorialPagos>
   }
 
   // ========================
+  // RESUMEN GENERAL DE PAGOS
+  // ========================
+  Future<Map<String, dynamic>> _obtenerResumenPagos() async {
+    final firestore = FirebaseFirestore.instance;
+
+    final resultados = await Future.wait([
+      firestore.collection('deudas').where('estado', isEqualTo: 'activo').get(),
+      firestore.collection('deudas').where('estado', isEqualTo: 'pagado').get(),
+    ]);
+
+    final deudasActivas = resultados[0].docs;
+    final deudasPagadas = resultados[1].docs;
+
+    double totalPendiente = 0;
+
+    for (final deuda in deudasActivas) {
+      final data = deuda.data();
+      final saldo = data['saldo'];
+
+      if (saldo is num) {
+        totalPendiente += saldo.toDouble();
+      }
+    }
+
+    return {
+      'cantidadActivas': deudasActivas.length,
+      'totalPendiente': totalPendiente,
+      'cantidadPagadas': deudasPagadas.length,
+    };
+  }
+
+  // ========================
+  // MOSTRAR RESUMEN GENERAL
+  // ========================
+  void _mostrarResumenPagos() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Resumen de pagos',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: FutureBuilder<Map<String, dynamic>>(
+            future: _obtenerResumenPagos(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 120,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return const Text(
+                  'No fue posible obtener el resumen de pagos.',
+                );
+              }
+
+              final resumen = snapshot.data!;
+
+              final cantidadActivas = resumen['cantidadActivas'] as int;
+
+              final totalPendiente = resumen['totalPendiente'] as double;
+
+              final cantidadPagadas = resumen['cantidadPagadas'] as int;
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Deudas activas
+                  const Text(
+                    'Deudas activas',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 6),
+
+                  Text(
+                    'Pedidos pendientes: $cantidadActivas',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Text('Total pendiente:'),
+
+                  Text(
+                    '\$${AppConstants.formatearMoneda(totalPendiente.toInt())}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const Divider(height: 30),
+
+                  // Deudas pagadas
+                  const Text(
+                    'Deudas pagadas',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  Text(
+                    'Pedidos pagados: $cantidadPagadas',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ],
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ========================
   // LIMPIEZA AUTOMÁTICA
   // ========================
   Future<void> _limpiarDeudasVencidas() async {
@@ -158,6 +283,12 @@ class _HistorialPagosState extends State<HistorialPagos>
     }
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'historial_pago_fab',
+        onPressed: _mostrarResumenPagos,
+        tooltip: 'Resumen de pagos',
+        child: const Icon(Icons.analytics_outlined),
+      ),
       appBar: AppBar(
         title: const Text('Historial de pagos'),
         actions: _userRole == 'admin'
