@@ -58,6 +58,9 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
   // String _busqueda = "";
   bool _estaFiltrado = false;
 
+  // Identificador del pedido seleccionado en el tablero.
+  String? _pedidoTableroSeleccionado;
+
   late String _usuarioIdFiltrado;
 
   // Lista para almacenar las fechas únicas
@@ -984,6 +987,386 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     }
   }
 
+  void _mostrarTableroPedidos() {
+    _pedidoTableroSeleccionado = null;
+    final adminId = _usuarioIdFiltrado;
+
+    // Excluimos la opción "Todos" para contar los usuarios reales.
+    final usuariosReales = _usuarios
+        .where((usuario) => usuario['role'] != 'todos')
+        .toList();
+
+    final cantidadAsistentes = usuariosReales
+        .where((usuario) => usuario['role'] == 'asistente')
+        .length;
+
+    final mostrarSelector = cantidadAsistentes > 0 || _userRole == 'asistente';
+
+    // Para un administrador con un solo asistente:
+    // inicialmente mostramos asistente y después administrador.
+    final esUnSoloAsistente = _userRole == 'admin' && cantidadAsistentes == 1;
+
+    final usuariosTablero = List<Map<String, dynamic>>.from(_usuarios);
+
+    if (esUnSoloAsistente) {
+      final todos = usuariosTablero.where((u) => u['id'] == 'Todos').toList();
+
+      final asistentes = usuariosTablero
+          .where((u) => u['role'] == 'asistente')
+          .toList();
+
+      final administradores = usuariosTablero
+          .where((u) => u['role'] == 'admin')
+          .toList();
+
+      usuariosTablero
+        ..clear()
+        ..addAll(todos)
+        ..addAll(asistentes)
+        ..addAll(administradores);
+    }
+
+    String usuarioInicial = 'Todos';
+    bool asistentePrimero = true;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+                .collection('pedidos')
+                .where('adminId', isEqualTo: adminId);
+
+            final fecha = _fechaSeleccionada;
+
+            if (fecha != null && fecha != 'Todos') {
+              final rango = _rangoDiaDesdeClave(fecha);
+
+              query = query
+                  .where(
+                    'fecha',
+                    isGreaterThanOrEqualTo: Timestamp.fromDate(
+                      rango['inicio']!,
+                    ),
+                  )
+                  .where(
+                    'fecha',
+                    isLessThanOrEqualTo: Timestamp.fromDate(rango['fin']!),
+                  );
+            }
+
+            return AlertDialog(
+              title: const Text('Tablero de pedidos'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.65,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Fecha: ${fecha ?? 'Todos'}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+
+                        if (mostrarSelector) ...[
+                          const SizedBox(height: 12),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  initialValue: usuarioInicial,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Usuario',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: usuariosTablero.map((usuario) {
+                                    return DropdownMenuItem<String>(
+                                      value: usuario['id'] as String,
+                                      child: Text(
+                                        usuario['name'] as String,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    if (value == null) return;
+
+                                    setStateDialog(() {
+                                      usuarioInicial = value;
+                                    });
+                                  },
+                                ),
+                              ),
+
+                              if (esUnSoloAsistente) ...[
+                                const SizedBox(width: 6),
+                                IconButton(
+                                  tooltip: 'Invertir orden de usuarios',
+                                  onPressed: () {
+                                    setStateDialog(() {
+                                      asistentePrimero = !asistentePrimero;
+
+                                      final todos = usuariosTablero
+                                          .where((u) => u['id'] == 'Todos')
+                                          .toList();
+
+                                      final asistentes = usuariosTablero
+                                          .where(
+                                            (u) => u['role'] == 'asistente',
+                                          )
+                                          .toList();
+
+                                      final administradores = usuariosTablero
+                                          .where((u) => u['role'] == 'admin')
+                                          .toList();
+
+                                      usuariosTablero
+                                        ..clear()
+                                        ..addAll(todos);
+
+                                      if (asistentePrimero) {
+                                        usuariosTablero
+                                          ..addAll(asistentes)
+                                          ..addAll(administradores);
+                                      } else {
+                                        usuariosTablero
+                                          ..addAll(administradores)
+                                          ..addAll(asistentes);
+                                      }
+                                    });
+                                  },
+                                  icon: const Icon(Icons.swap_vert),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+
+                        const SizedBox(height: 15),
+
+                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: query.snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text(
+                                  'No fue posible cargar los pedidos.',
+                                ),
+                              );
+                            }
+
+                            if (snapshot.connectionState ==
+                                    ConnectionState.waiting &&
+                                !snapshot.hasData) {
+                              return const Padding(
+                                padding: EdgeInsets.all(25),
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+
+                            var pedidos = snapshot.data?.docs.toList() ?? [];
+
+                            // Filtrar por usuario seleccionado.
+                            if (usuarioInicial != 'Todos') {
+                              pedidos = pedidos.where((pedido) {
+                                final data = pedido.data();
+                                return data['creado_por'] == usuarioInicial;
+                              }).toList();
+                            }
+
+                            // Orden descendente por número de pedido.
+                            pedidos.sort((a, b) {
+                              final numeroA = a.data()['numero_pedido'] ?? 0;
+                              final numeroB = b.data()['numero_pedido'] ?? 0;
+
+                              return numeroB.compareTo(numeroA);
+                            });
+
+                            if (pedidos.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Text('No hay pedidos para mostrar.'),
+                              );
+                            }
+
+                            final seleccionados = pedidos.where((pedido) {
+                              return pedido.id == _pedidoTableroSeleccionado;
+                            }).toList();
+
+                            final pedidoSeleccionado = seleccionados.isNotEmpty
+                                ? seleccionados.first
+                                : null;
+
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.center,
+                                  children: pedidos.map((pedido) {
+                                    final data = pedido.data();
+
+                                    final numero =
+                                        data['numero_pedido']?.toString() ??
+                                        '0';
+
+                                    final numSmall = numero.length > 2
+                                        ? numero.substring(numero.length - 2)
+                                        : numero.padLeft(2, '0');
+
+                                    final entregado = data['entregado'] == true;
+
+                                    final seleccionado =
+                                        pedido.id == _pedidoTableroSeleccionado;
+
+                                    return InkWell(
+                                      onTap: () {
+                                        setStateDialog(() {
+                                          _pedidoTableroSeleccionado =
+                                              pedido.id;
+                                        });
+                                      },
+                                      child: Container(
+                                        width: 48,
+                                        height: 48,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: entregado
+                                              ? Colors.green.shade600
+                                              : Colors.orange.shade700,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: seleccionado
+                                                ? Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary
+                                                : Colors.transparent,
+                                            width: 3,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          numSmall,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+
+                                const SizedBox(height: 18),
+
+                                if (pedidoSeleccionado != null) ...[
+                                  const Divider(),
+
+                                  Text(
+                                    'Pedido #${pedidoSeleccionado.data()['numero_pedido']}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 17,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 6),
+
+                                  Text(
+                                    'Cliente: ${pedidoSeleccionado.data()['cliente'] ?? 'Sin nombre'}',
+                                  ),
+
+                                  Text(
+                                    'Valor: \$${AppConstants.formatearMoneda(pedidoSeleccionado.data()['valor_total'])}',
+                                  ),
+
+                                  const SizedBox(height: 6),
+
+                                  Text(
+                                    pedidoSeleccionado.data()['entregado'] ==
+                                            true
+                                        ? 'Estado: Entregado'
+                                        : 'Estado: No entregado',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                          pedidoSeleccionado
+                                                  .data()['entregado'] ==
+                                              true
+                                          ? Colors.green
+                                          : Colors.orange,
+                                    ),
+                                  ),
+                                ],
+
+                                const SizedBox(height: 12),
+
+                                Wrap(
+                                  spacing: 15,
+                                  children: [
+                                    _leyendaEstado(
+                                      Colors.green.shade600,
+                                      'Entregado',
+                                    ),
+                                    _leyendaEstado(
+                                      Colors.orange.shade700,
+                                      'No entregado',
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cerrar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _leyendaEstado(Color color, String texto) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(texto, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+
   Map<String, List<DocumentSnapshot>> _agruparPorFecha(
     List<DocumentSnapshot> pedidos,
   ) {
@@ -1508,7 +1891,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
               );
             },
           ),
-          SizedBox(width: 16),
+          SizedBox(width: 12),
           FloatingActionButton(
             heroTag: "fab2",
             child: const Icon(Icons.history),
@@ -1517,6 +1900,14 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                 context,
                 MaterialPageRoute(builder: (_) => const HistorialPagos()),
               );
+            },
+          ),
+          SizedBox(width: 12),
+          FloatingActionButton(
+            heroTag: "fab3",
+            child: const Icon(Icons.playlist_add_check_circle),
+            onPressed: () {
+              _mostrarTableroPedidos();
             },
           ),
         ],
@@ -1578,79 +1969,83 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
       position: _offsetAnimation,
       child: Column(
         children: [
-          GestureDetector(
-            onLongPress: () {
-              _mostrarInfoEdicion(context, data);
-            },
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => InfoPedido(pedido: pedido),
-                ),
-              );
-            },
-            onDoubleTap: () {
-              final pago = pagoNotifier.value;
-              final formaPago = pago?['tipo'] ?? 'entrega';
-              final referencia = pago?['referencia_pago'];
-
-              if (formaPago == 'entrega' || formaPago == 'bancario') {
-                _mostrarDialogFormaPago(context, pedido, pagoNotifier);
-                return;
-              }
-
-              if ((formaPago == 'cuotas' || formaPago == 'fianza') &&
-                  pago == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Este pedido no tiene información de pago registrada',
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onLongPress: () {
+                  _mostrarInfoEdicion(context, data);
+                },
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => InfoPedido(pedido: pedido),
                     ),
-                  ),
-                );
-                return;
-              }
+                  );
+                },
+                onDoubleTap: () {
+                  final pago = pagoNotifier.value;
+                  final formaPago = pago?['tipo'] ?? 'entrega';
+                  final referencia = pago?['referencia_pago'];
 
-              if (formaPago == 'cuotas') {
-                if (referencia == null) {
-                  _mostrarDialogFormaPago(context, pedido, pagoNotifier);
-                  return;
-                }
+                  if (formaPago == 'entrega' || formaPago == 'bancario') {
+                    _mostrarDialogFormaPago(context, pedido, pagoNotifier);
+                    return;
+                  }
 
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        GestionCuotas(pedidoId: pedido.id, deudaId: referencia),
-                  ),
-                );
-                return;
-              }
+                  if ((formaPago == 'cuotas' || formaPago == 'fianza') &&
+                      pago == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Este pedido no tiene información de pago registrada',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
 
-              if (formaPago == 'fianza') {
-                if (referencia == null) {
-                  _mostrarDialogFormaPago(context, pedido, pagoNotifier);
-                  return;
-                }
+                  if (formaPago == 'cuotas') {
+                    if (referencia == null) {
+                      _mostrarDialogFormaPago(context, pedido, pagoNotifier);
+                      return;
+                    }
 
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        GestionFianza(pedidoId: pedido.id, deudaId: referencia),
-                  ),
-                );
-                return;
-              }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => GestionCuotas(
+                          pedidoId: pedido.id,
+                          deudaId: referencia,
+                        ),
+                      ),
+                    );
+                    return;
+                  }
 
-              // SOLO PARA ENTREGA / BANCARIO
-              // _mostrarDialogFormaPago(context, pedido, formaPagoNotifier);
-            },
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
+                  if (formaPago == 'fianza') {
+                    if (referencia == null) {
+                      _mostrarDialogFormaPago(context, pedido, pagoNotifier);
+                      return;
+                    }
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => GestionFianza(
+                          pedidoId: pedido.id,
+                          deudaId: referencia,
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  // SOLO PARA ENTREGA / BANCARIO
+                  // _mostrarDialogFormaPago(context, pedido, formaPagoNotifier);
+                },
+                child: Container(
                   key: ValueKey(pedido.id),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(5),
@@ -1842,11 +2237,28 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                Positioned(
-                  bottom: -35, // Esto lo hace quedar pegado sin espacio
-                  left: 0,
-                  right: 0,
-                  child: Center(
+              ),
+              Positioned(
+                bottom: -35, // Esto lo hace quedar pegado sin espacio
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        useRootNavigator: true,
+                        builder: (dialogContext) {
+                          return AlertDialog(
+                            content: Text(
+                              'Pedido #${data['numero_pedido']}',
+                              style: const TextStyle(fontSize: 36),
+                            ),
+                          );
+                        },
+                      );
+                    },
                     child: AnimatedBuilder(
                       animation: _brilloAnimation,
                       builder: (context, child) {
@@ -1883,25 +2295,12 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                             Positioned(
                               top:
                                   32, // mueve el número hacia arriba para que no se tape
-                              child: GestureDetector(
-                                onTap: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (_) => AlertDialog(
-                                      content: Text(
-                                        'Pedido #${data['numero_pedido']}',
-                                        style: TextStyle(fontSize: 36),
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Text(
-                                  numSmall,
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              child: Text(
+                                numSmall,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
@@ -1911,32 +2310,19 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                EntregaPedido(
-                  key: ValueKey('entrega_${pedido.id}'),
-                  pedido: pedido,
-                  onEstadoCambiado: (nuevoEstado) async {
-                    setState(() {
-                      final index = _pedidosVisibles.indexWhere(
-                        (p) => p.id == pedido.id,
-                      );
-
-                      if (index != -1) {
-                        _pedidosVisibles[index].data['entregado'] = nuevoEstado;
-                      }
-                    });
-
-                    // También actualiza la fuente de datos (Firestore)
-                    await FirebaseFirestore.instance
-                        .collection('pedidos')
-                        .doc(pedido.id)
-                        .update({'entregado': nuevoEstado});
-
-                    // Opcional: vuelve a aplicar filtros si están activos
-                    // _aplicarFiltros();
-                  },
-                ),
-              ],
-            ),
+              ),
+              EntregaPedido(
+                key: ValueKey('entrega_${pedido.id}'),
+                pedido: pedido,
+                onEstadoCambiado: (nuevoEstado) {
+                  // Si existe un filtro de entrega, se vuelve a consultar
+                  // para que el pedido entre o salga de la lista según su estado.
+                  if (_filtroEntrega != 'Todos' && mounted) {
+                    _aplicarFiltros();
+                  }
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 40),
         ],
@@ -2308,10 +2694,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
       },
     );
   }
-}
-
-extension on Object? Function() {
-  void operator []=(String index, bool newValue) {}
 }
 
 class _HalfCircleClipper extends CustomClipper<Path> {
