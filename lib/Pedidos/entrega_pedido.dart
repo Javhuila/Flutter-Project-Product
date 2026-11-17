@@ -14,13 +14,31 @@ class EntregaPedido extends StatefulWidget {
 class _EntregaPedidoState extends State<EntregaPedido>
     with TickerProviderStateMixin {
   bool _actualizando = false;
-  late bool _entregadoActual;
 
-  @override
-  void initState() {
-    super.initState();
-    final data = widget.pedido.data() as Map<String, dynamic>;
-    _entregadoActual = data['entregado'] ?? false;
+  Future<void> _cambiarEstado(bool entregadoActual) async {
+    if (_actualizando) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    setState(() => _actualizando = true);
+
+    final nuevoEstado = !entregadoActual;
+
+    try {
+      await widget.pedido.reference.update({'entregado': nuevoEstado});
+
+      widget.onEstadoCambiado?.call(nuevoEstado);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error al actualizar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _actualizando = false);
+      }
+    }
   }
 
   @override
@@ -29,75 +47,49 @@ class _EntregaPedidoState extends State<EntregaPedido>
     return Positioned(
       top: 5,
       right: 5,
-      child: GestureDetector(
-        onTap: _actualizando
-            ? null
-            : () async {
-                final messenger = ScaffoldMessenger.of(context);
+      child: StreamBuilder<DocumentSnapshot>(
+        stream: widget.pedido.reference.snapshots(),
+        initialData: widget.pedido,
+        builder: (context, snapshot) {
+          final data = snapshot.data?.data() as Map<String, dynamic>?;
 
-                setState(() {
-                  _actualizando = true;
-                });
+          final entregadoActual = data?['entregado'] == true;
 
-                try {
-                  final nuevoEstado = !_entregadoActual;
-
-                  // Actualizar en Firestore
-                  await FirebaseFirestore.instance
-                      .collection('pedidos')
-                      .doc(widget.pedido.id)
-                      .update({'entregado': nuevoEstado});
-
-                  // Actualizar localmente para reflejar el cambio inmediato
-                  setState(() {
-                    _entregadoActual = nuevoEstado;
-                  });
-
-                  // Notificar al widget padre
-                  if (widget.onEstadoCambiado != null) {
-                    widget.onEstadoCambiado!(nuevoEstado);
-                  }
-
-                  // Espera pequeña para transición visual
-                  await Future.delayed(const Duration(milliseconds: 250));
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Error al actualizar: $e')),
-                  );
-                }
-
-                if (mounted) {
-                  setState(() {
-                    _actualizando = false;
-                  });
-                }
-              },
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (child, animation) => ScaleTransition(
-            scale: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
-            child: child,
-          ),
-          child: _actualizando
-              ? const SizedBox(
-                  key: ValueKey('Cargando'),
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  _entregadoActual ? Icons.check_circle : Icons.access_time,
-                  key: ValueKey(_entregadoActual),
-                  color: PaletasDeColores.getColorIconoEntrega(
-                    entregado: _entregadoActual,
-                    theme: theme,
-                  ),
-                  // color: _entregadoActual
-                  //     ? theme.primaryColor
-                  //     : theme.colorScheme.secondary,
-                  size: 40,
+          return GestureDetector(
+            onTap: _actualizando || !snapshot.hasData
+                ? null
+                : () => _cambiarEstado(entregadoActual),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (child, animation) => ScaleTransition(
+                scale: CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeInOut,
                 ),
-        ),
+                child: child,
+              ),
+              child: _actualizando
+                  ? const SizedBox(
+                      key: ValueKey('Cargando'),
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      entregadoActual ? Icons.check_circle : Icons.access_time,
+                      key: ValueKey(entregadoActual),
+                      color: PaletasDeColores.getColorIconoEntrega(
+                        entregado: entregadoActual,
+                        theme: theme,
+                      ),
+                      // color: _entregadoActual
+                      //     ? theme.primaryColor
+                      //     : theme.colorScheme.secondary,
+                      size: 40,
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
