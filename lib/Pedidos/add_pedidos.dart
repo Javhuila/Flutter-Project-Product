@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_project_product/Pedidos/product_load.dart';
 
+import '../Utils/Constans/app_constants.dart';
+
 class AddPedidos extends StatefulWidget {
   const AddPedidos({super.key});
 
@@ -25,19 +27,6 @@ class _AddPedidosState extends State<AddPedidos> {
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _clientesDocs = [];
 
   final FocusNode _clienteFocusNode = FocusNode();
-
-  String _normalizeText(String text) {
-    const withAccents = 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑ';
-    const withoutAccents = 'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUN';
-
-    String result = text;
-
-    for (int i = 0; i < withAccents.length; i++) {
-      result = result.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-
-    return result.toLowerCase().trim();
-  }
 
   Future<void> _cargarClientesBase() async {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -219,8 +208,10 @@ class _AddPedidosState extends State<AddPedidos> {
                       return _clienteList;
                     }
                     return _clienteList.where((String option) {
-                      final input = _normalizeText(textEditingValue.text);
-                      final candidate = _normalizeText(option);
+                      final input = AppConstants.normalizeText(
+                        textEditingValue.text,
+                      );
+                      final candidate = AppConstants.normalizeText(option);
                       return candidate.contains(input);
                     });
                   },
@@ -250,10 +241,13 @@ class _AddPedidosState extends State<AddPedidos> {
                             if (value == null || value.isEmpty) {
                               return 'Seleccione o escriba un cliente válido';
                             }
-                            final normalizedInput = _normalizeText(value);
+                            final normalizedInput = AppConstants.normalizeText(
+                              value,
+                            );
                             final found = _clienteList.any(
                               (cliente) =>
-                                  _normalizeText(cliente) == normalizedInput,
+                                  AppConstants.normalizeText(cliente) ==
+                                  normalizedInput,
                             );
 
                             if (!found) {
