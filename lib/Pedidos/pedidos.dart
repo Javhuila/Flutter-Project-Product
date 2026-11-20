@@ -296,15 +296,11 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     }
 
     // 4. Filtrar por estado de entrega
-    if (_filtroEntrega == 'Entregados') {
+    if (_filtroEntrega != 'Todos') {
       pedidosFiltrados = pedidosFiltrados.where((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        return (data['entregado'] ?? false) == true;
-      }).toList();
-    } else if (_filtroEntrega == 'No entregados') {
-      pedidosFiltrados = pedidosFiltrados.where((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return (data['entregado'] ?? false) == false;
+
+        return AppConstants.obtenerEstado(data) == _filtroEntrega;
       }).toList();
     }
 
@@ -427,10 +423,23 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
     }
 
     // --- Aplicar filtro de entrega (si aplica) ---
-    if (_filtroEntrega == 'Entregados') {
-      query = query.where('entregado', isEqualTo: true);
-    } else if (_filtroEntrega == 'No entregados') {
-      query = query.where('entregado', isEqualTo: false);
+
+    if (_filtroEntrega == 'entregado') {
+      query = query.where(
+        Filter.or(
+          Filter('estado_entrega', isEqualTo: 'entregado'),
+          Filter('entregado', isEqualTo: true),
+        ),
+      );
+    } else if (_filtroEntrega == 'no_entregado') {
+      query = query.where(
+        Filter.or(
+          Filter('estado_entrega', isEqualTo: 'no_entregado'),
+          Filter('entregado', isEqualTo: false),
+        ),
+      );
+    } else if (_filtroEntrega == 'pendiente') {
+      query = query.where('estado_entrega', isEqualTo: 'pendiente');
     }
 
     // --- Aplicar filtro de forma de pago (si aplica) ---
@@ -1196,14 +1205,28 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                                 child: Text('No hay pedidos para mostrar.'),
                               );
                             }
+                            final pedidoEncontrado = pedidos.where(
+                              (pedido) =>
+                                  pedido.id == _pedidoTableroSeleccionado,
+                            );
 
-                            final seleccionados = pedidos.where((pedido) {
-                              return pedido.id == _pedidoTableroSeleccionado;
-                            }).toList();
+                            final pedidoSeleccionado =
+                                pedidoEncontrado.isNotEmpty
+                                ? pedidoEncontrado.first
+                                : pedidos.first;
+                            final dataSeleccionado = pedidoSeleccionado.data();
+                            final estadoSeleccionado =
+                                AppConstants.obtenerEstado(dataSeleccionado);
 
-                            final pedidoSeleccionado = seleccionados.isNotEmpty
-                                ? seleccionados.first
-                                : null;
+                            final colorSeleccionado =
+                                PaletasDeColores.getColorEstadoEntrega(
+                                  estado: estadoSeleccionado,
+                                  theme: Theme.of(context),
+                                  catalogo: Provider.of<ThemeProvider>(
+                                    context,
+                                    listen: false,
+                                  ).catalogo,
+                                );
 
                             return Column(
                               mainAxisSize: MainAxisSize.min,
@@ -1223,7 +1246,22 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                                         ? numero.substring(numero.length - 2)
                                         : numero.padLeft(2, '0');
 
-                                    final entregado = data['entregado'] == true;
+                                    final estadoEntrega =
+                                        AppConstants.obtenerEstado(data);
+
+                                    final theme = Theme.of(context);
+                                    final themeProvider =
+                                        Provider.of<ThemeProvider>(
+                                          context,
+                                          listen: false,
+                                        );
+
+                                    final colorEstado =
+                                        PaletasDeColores.getColorEstadoEntrega(
+                                          estado: estadoEntrega,
+                                          theme: theme,
+                                          catalogo: themeProvider.catalogo,
+                                        );
 
                                     final seleccionado =
                                         pedido.id == _pedidoTableroSeleccionado;
@@ -1240,9 +1278,7 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                                         height: 48,
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
-                                          color: entregado
-                                              ? Colors.green.shade600
-                                              : Colors.orange.shade700,
+                                          color: colorEstado,
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
@@ -1258,7 +1294,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                                         child: Text(
                                           numSmall,
                                           style: const TextStyle(
-                                            color: Colors.white,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 16,
                                           ),
@@ -1269,59 +1304,66 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                                 ),
 
                                 const SizedBox(height: 18),
-
-                                if (pedidoSeleccionado != null) ...[
-                                  const Divider(),
-
-                                  Text(
-                                    'Pedido #${pedidoSeleccionado.data()['numero_pedido']}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 17,
-                                    ),
+                                const Divider(),
+                                Text(
+                                  'Pedido #${pedidoSeleccionado.data()['numero_pedido']}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
                                   ),
-
-                                  const SizedBox(height: 6),
-
-                                  Text(
-                                    'Cliente: ${pedidoSeleccionado.data()['cliente'] ?? 'Sin nombre'}',
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Cliente: ${pedidoSeleccionado.data()['cliente'] ?? 'Sin nombre'}',
+                                ),
+                                Text(
+                                  'Valor: \$${AppConstants.formatearMoneda(pedidoSeleccionado.data()['valor_total'])}',
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Estado: ${AppConstants.obtenerNombreEstadoEntrega(estadoSeleccionado)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: colorSeleccionado,
                                   ),
-
-                                  Text(
-                                    'Valor: \$${AppConstants.formatearMoneda(pedidoSeleccionado.data()['valor_total'])}',
-                                  ),
-
-                                  const SizedBox(height: 6),
-
-                                  Text(
-                                    pedidoSeleccionado.data()['entregado'] ==
-                                            true
-                                        ? 'Estado: Entregado'
-                                        : 'Estado: No entregado',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color:
-                                          pedidoSeleccionado
-                                                  .data()['entregado'] ==
-                                              true
-                                          ? Colors.green
-                                          : Colors.orange,
-                                    ),
-                                  ),
-                                ],
-
+                                ),
                                 const SizedBox(height: 12),
-
                                 Wrap(
                                   spacing: 15,
+                                  runSpacing: 8,
                                   children: [
                                     _leyendaEstado(
-                                      Colors.green.shade600,
-                                      'Entregado',
+                                      PaletasDeColores.getColorEstadoEntrega(
+                                        estado: 'no_entregado',
+                                        theme: Theme.of(context),
+                                        catalogo: Provider.of<ThemeProvider>(
+                                          context,
+                                          listen: false,
+                                        ).catalogo,
+                                      ),
+                                      'No entregado',
                                     ),
                                     _leyendaEstado(
-                                      Colors.orange.shade700,
-                                      'No entregado',
+                                      PaletasDeColores.getColorEstadoEntrega(
+                                        estado: 'pendiente',
+                                        theme: Theme.of(context),
+                                        catalogo: Provider.of<ThemeProvider>(
+                                          context,
+                                          listen: false,
+                                        ).catalogo,
+                                      ),
+                                      'Pendiente',
+                                    ),
+                                    _leyendaEstado(
+                                      PaletasDeColores.getColorEstadoEntrega(
+                                        estado: 'entregado',
+                                        theme: Theme.of(context),
+                                        catalogo: Provider.of<ThemeProvider>(
+                                          context,
+                                          listen: false,
+                                        ).catalogo,
+                                      ),
+                                      'Entregado',
                                     ),
                                   ],
                                 ),
@@ -1339,7 +1381,10 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                   onPressed: () {
                     Navigator.pop(dialogContext);
                   },
-                  child: const Text('Cerrar'),
+                  child: const Text(
+                    'Cerrar',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             );
@@ -1675,11 +1720,15 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                     items: const [
                       DropdownMenuItem(value: 'Todos', child: Text('Todos')),
                       DropdownMenuItem(
-                        value: 'Entregados',
+                        value: 'entregado',
                         child: Text('Entregados'),
                       ),
                       DropdownMenuItem(
-                        value: 'No entregados',
+                        value: 'pendiente',
+                        child: Text('Pendientes'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'no_entregado',
                         child: Text('No entregados'),
                       ),
                     ],
@@ -1752,7 +1801,6 @@ class _PedidosState extends State<Pedidos> with TickerProviderStateMixin {
                   labelText: "Buscar",
                   hintText: "Buscar pedidos",
                   suffixIcon: const Icon(Icons.search_outlined, size: 40),
-                  suffixIconColor: Colors.grey,
                   floatingLabelBehavior: FloatingLabelBehavior.always,
                   border: InputBorder.none,
                   enabledBorder: OutlineInputBorder(
