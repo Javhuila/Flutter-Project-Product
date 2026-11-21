@@ -18,6 +18,7 @@ class _EditClientesState extends State<EditClientes> {
   late TextEditingController _telefonoController;
   late TextEditingController _direccionController;
   late TextEditingController _barrioController;
+  late TextEditingController _razonController;
   late TextEditingController _correoController;
   String? _selectedTipoIden;
   final List<String> _tipoClient = ['Normal', 'Especial'];
@@ -34,6 +35,7 @@ class _EditClientesState extends State<EditClientes> {
     _telefonoController = TextEditingController(text: data['telefono']);
     _direccionController = TextEditingController(text: data['direccion']);
     _barrioController = TextEditingController(text: data['barrio']);
+    _razonController = TextEditingController(text: data['razon']);
     _correoController = TextEditingController(text: data['correo']);
     _selectedTipoIden = data['tipo'];
   }
@@ -84,6 +86,7 @@ class _EditClientesState extends State<EditClientes> {
             'telefono': _telefonoController.text.trim(),
             'direccion': _direccionController.text.trim(),
             'barrio': _barrioController.text.trim(),
+            'razon': _razonController.text.trim(),
             'correo': _correoController.text.trim(),
             'tipo': _selectedTipoIden,
           });
@@ -190,10 +193,26 @@ class _EditClientesState extends State<EditClientes> {
                 ),
                 SizedBox(height: 15),
                 TextFormField(
+                  controller: _razonController,
+                  decoration: InputDecoration(labelText: "Razón Social"),
+                ),
+                SizedBox(height: 15),
+                TextFormField(
                   controller: _correoController,
                   decoration: InputDecoration(labelText: "Correo"),
                   keyboardType: TextInputType.emailAddress,
                   style: TextStyle(overflow: TextOverflow.ellipsis),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return null;
+                    }
+                    if (!RegExp(
+                      r'^[^@]+@[^@]+\.[^@]+',
+                    ).hasMatch(value.trim())) {
+                      return 'Email inválido';
+                    }
+                    return null;
+                  },
                 ),
                 SizedBox(height: 15),
                 ElevatedButton(

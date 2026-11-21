@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'edit_clientes.dart';
 
 class InfoClientes extends StatefulWidget {
@@ -52,6 +53,7 @@ class _InfoClientesState extends State<InfoClientes> {
     final telefono = data['telefono'] ?? '';
     final direccion = data['direccion'] ?? '';
     final barrio = data['barrio'] ?? '';
+    final razon = data['razon'] ?? '';
     final correo = data['correo'] ?? '';
     final tipo = data['tipo'] ?? '';
 
@@ -110,10 +112,35 @@ class _InfoClientesState extends State<InfoClientes> {
                       ),
                       const SizedBox(height: 20),
                       _buildSectionTitle("Teléfono"),
-                      Text(
-                        telefono,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16),
+                      Row(
+                        spacing: 2,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            telefono,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16),
+                          ),
+                          IconButton(
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              await Clipboard.setData(
+                                ClipboardData(text: telefono),
+                              );
+
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Teléfono copiado al portapapeles',
+                                  ),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            icon: Icon(Icons.copy_rounded, size: 30),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 20),
                       _buildSectionTitle("Dirección"),
@@ -126,6 +153,13 @@ class _InfoClientesState extends State<InfoClientes> {
                       _buildSectionTitle("Barrio"),
                       Text(
                         barrio,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildSectionTitle("Razón Social"),
+                      Text(
+                        razon,
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 16),
                       ),
