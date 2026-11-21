@@ -17,6 +17,7 @@ class _AddClientesState extends State<AddClientes> {
   final _telefonoController = TextEditingController();
   final _direccionController = TextEditingController();
   final _barrioController = TextEditingController();
+  final _razonController = TextEditingController();
   final _correoController = TextEditingController();
 
   String? _selectedTipoIden;
@@ -53,6 +54,7 @@ class _AddClientesState extends State<AddClientes> {
         'telefono': _telefonoController.text.trim(),
         'direccion': _direccionController.text.trim(),
         'barrio': _barrioController.text.trim(),
+        'razon': _razonController.text.trim(),
         'correo': _correoController.text.trim(),
         'createdAt': FieldValue.serverTimestamp(),
         'adminId': adminId,
@@ -160,14 +162,22 @@ class _AddClientesState extends State<AddClientes> {
                 ),
                 SizedBox(height: 15),
                 TextFormField(
+                  controller: _razonController,
+                  decoration: InputDecoration(labelText: "Razón Social"),
+                ),
+                SizedBox(height: 15),
+                TextFormField(
                   controller: _correoController,
                   decoration: InputDecoration(labelText: "Correo"),
+                  keyboardType: TextInputType.emailAddress,
                   style: TextStyle(overflow: TextOverflow.ellipsis),
                   validator: (value) {
-                    // if (value == null || value.isEmpty) {
-                    //   return 'Por favor ingresa tu email';
-                    // }
-                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value!)) {
+                    if (value == null || value.isEmpty) {
+                      return null;
+                    }
+                    if (!RegExp(
+                      r'^[^@]+@[^@]+\.[^@]+',
+                    ).hasMatch(value.trim())) {
                       return 'Email inválido';
                     }
                     return null;
